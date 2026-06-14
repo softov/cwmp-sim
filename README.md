@@ -1,6 +1,14 @@
 # cwmp-sim
 
+[![npm version](https://img.shields.io/npm/v/cwmp-sim.svg)](https://www.npmjs.com/package/cwmp-sim)
+[![node](https://img.shields.io/node/v/cwmp-sim.svg)](https://www.npmjs.com/package/cwmp-sim)
+[![license](https://img.shields.io/npm/l/cwmp-sim.svg)](LICENSE)
+
 A TypeScript CWMP/TR-069 CPE simulator for testing ACS sessions, SOAP RPC flows, Digest authentication, diagnostics, file transfers, and Connection Request handling.
+
+> Published on npm as [`cwmp-sim`](https://www.npmjs.com/package/cwmp-sim).
+> Run it as a CLI with `npx cwmp-sim`, or clone the repo to develop.
+> Zero runtime dependencies — Node.js `>=22` only.
 
 ## What This Project Is
 
@@ -264,7 +272,34 @@ This allows an ACS to test asynchronous transfer workflows, including delayed ex
 
 Runtime code is built on native Node.js modules such as `http`, `https`, `net`, `crypto`, `fs`, and `child_process`. There are no runtime dependencies.
 
-## Installation
+## Installation & Usage
+
+There are two ways to run `cwmp-sim`: install it from npm to use it as a tool, or clone the repo to develop it.
+
+### Option A — From npm (use it as a CLI)
+
+Run it directly without installing:
+
+```bash
+npx cwmp-sim --acs http://your-acs:7547/ --serial SIM001
+```
+
+Or install it globally and run the `cwmp-sim` command:
+
+```bash
+npm install -g cwmp-sim
+cwmp-sim --acs http://your-acs:7547/ --serial SIM001
+```
+
+The npm CLI is configured via [CLI options](#cli-options) and/or [environment variables](#environment-variables)
+(`ACS_URL`, `ACS_USER`, `DEVICE_SERIAL`, …) exported in your shell. To load settings from a `.env`
+file instead, run the binary through Node's `--env-file`:
+
+```bash
+node --env-file=.env "$(npm root -g)/cwmp-sim/dist/main.js"
+```
+
+### Option B — From source (development)
 
 ```bash
 git clone https://github.com/softov/cwmp-sim.git
@@ -273,31 +308,20 @@ npm install
 cp .env.example .env   # then edit .env for your ACS
 ```
 
-## Running
+Then use the npm scripts:
 
-Development mode (runs `main.ts` directly via `tsx`, loads `.env`):
+| Command | What it does |
+| --- | --- |
+| `npm run dev` | Run `main.ts` directly via `tsx`, loading `.env`. |
+| `npm run build` | Compile TypeScript to `dist/`. |
+| `npm start` | Run the compiled build: `node --env-file=.env ./dist/main.js`. |
+| `npm run check` | Type-check only (`tsc --noEmit`). |
+| `npm test` | Run the unit suite (`test/**/*.test.ts`). |
 
-```bash
-npm run dev
-```
-
-Build TypeScript, then run the compiled output:
-
-```bash
-npm run build
-npm start
-```
-
-The `start` script runs:
+CLI flags can be passed through the scripts with `--`, e.g.:
 
 ```bash
-node --env-file=.env ./dist/main.js
-```
-
-Type-check without emitting:
-
-```bash
-npm run check
+npm run dev -- --acs http://your-acs:7547/ --serial SIM001
 ```
 
 ## Configuration
