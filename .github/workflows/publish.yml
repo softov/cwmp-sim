@@ -1,0 +1,48 @@
+name: Publish to npm
+
+# Publishes when a GitHub Release is published. The release tag (e.g. v0.1.0)
+# must match the version in package.json.
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write # required for npm provenance
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+          registry-url: https://registry.npmjs.org
+          cache: npm
+
+      - run: npm ci
+
+      - name: Verify release tag matches package.json version
+        run: |
+          PKG_VERSION="$(node -p "require('./package.json').version")"
+          TAG="${{ github.event.release.tag_name }}"
+          if [ "$TAG" != "v$PKG_VERSION" ] && [ "$TAG" != "$PKG_VERSION" ]; then
+            echo "::error::Release tag '$TAG' does not match package.json version '$PKG_VERSION'"
+            exit 1
+          fi
+
+      - name: Type-check
+        run: npm run check
+
+      - name: Unit tests
+        run: npm test
+
+      # prepublishOnly (check + test) and prepack (clean + build) also run as part
+      # of `npm publish`; --provenance adds a verified build attestation on npm.
+      - name: Publish
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

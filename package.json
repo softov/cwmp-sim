@@ -6,7 +6,7 @@
   "main": "./dist/main.js",
   "types": "./dist/main.d.ts",
   "bin": {
-    "cwmp-sim": "./dist/main.js"
+    "cwmp-sim": "dist/main.js"
   },
   "files": [
     "dist",
@@ -21,7 +21,8 @@
     "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\"",
     "prepack": "npm run clean && npm run build",
     "prepublishOnly": "npm run check && npm run test",
-    "test": "node --test \"test/**/*.test.ts\""
+    "test": "node --import tsx --test \"test/**/*.test.ts\"",
+    "release:dry": "npm publish --dry-run"
   },
   "keywords": [
     "cwmp",
@@ -42,12 +43,12 @@
   "license": "BSD-3-Clause",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Softov/cwmp-sim.git"
+    "url": "git+https://github.com/softov/cwmp-sim.git"
   },
   "bugs": {
-    "url": "https://github.com/Softov/cwmp-sim/issues"
+    "url": "https://github.com/softov/cwmp-sim/issues"
   },
-  "homepage": "https://github.com/Softov/cwmp-sim#readme",
+  "homepage": "https://github.com/softov/cwmp-sim#readme",
   "publishConfig": {
     "access": "public"
   },
