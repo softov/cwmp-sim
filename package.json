@@ -1,0 +1,62 @@
+{
+  "name": "@softov/cwmp-sim",
+  "version": "0.1.0",
+  "description": "TypeScript CWMP/TR-069 CPE simulator for testing ACS sessions, SOAP RPCs, diagnostics, transfers, and Connection Requests.",
+  "type": "module",
+  "main": "./dist/main.js",
+  "types": "./dist/main.d.ts",
+  "bin": {
+    "cwmp-sim": "./dist/main.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "dev": "node --import tsx --env-file=.env ./main.ts",
+    "build": "tsc",
+    "start": "node --env-file=.env ./dist/main.js",
+    "check": "tsc --noEmit",
+    "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\"",
+    "prepack": "npm run clean && npm run build",
+    "prepublishOnly": "npm run check && npm run test",
+    "test": "node --test"
+  },
+  "keywords": [
+    "cwmp",
+    "tr-069",
+    "tr069",
+    "tr-098",
+    "tr-181",
+    "acs",
+    "cpe",
+    "simulator",
+    "genieacs",
+    "soap",
+    "xml",
+    "broadband",
+    "typescript"
+  ],
+  "author": "Luiz Softov <fernandosoftov@gmail.com>",
+  "license": "BSD-3-Clause",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Softov/cwmp-sim.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Softov/cwmp-sim/issues"
+  },
+  "homepage": "https://github.com/Softov/cwmp-sim#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.21",
+    "tsx": "^4.22.4",
+    "typescript": "^5.8.0"
+  }
+}
