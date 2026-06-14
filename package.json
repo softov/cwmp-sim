@@ -1,6 +1,6 @@
 {
   "name": "cwmp-sim",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "TypeScript CWMP/TR-069 CPE simulator for testing ACS sessions, SOAP RPCs, diagnostics, transfers, and Connection Requests.",
   "type": "module",
   "main": "./dist/main.js",
