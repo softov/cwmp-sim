@@ -15,7 +15,7 @@ planned work. Items are unchecked until implemented.
 - [ ] **HTTPS Connection Request mode** is present in the code path, but certificate/key handling is not implemented.
 - [ ] **`SetParameterValues`** currently returns status `0` even if one or more parameter writes fail.
 - [ ] **XML parser** is intentionally lightweight and does not support every XML feature, including CDATA.
-- [ ] **`npm test`** (`node --test`) is a placeholder; the scripts under `test/` are not wired to run.
+- [x] **`npm test`** now runs the unit suite (`test/**/*.test.ts`) covering the pure modules (XML parser/utils, SOAP, model helpers) and the device data model (get/set, read-only enforcement, AddObject/DeleteObject, listeners). The legacy `test/test-*` scratch scripts are intentionally excluded from the glob. RPC-handler-level tests (`cwmp-methods.ts`) are still TODO.
 
 ## Roadmap ideas
 

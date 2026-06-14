@@ -1,5 +1,5 @@
 {
-  "name": "@softov/cwmp-sim",
+  "name": "cwmp-sim",
   "version": "0.1.0",
   "description": "TypeScript CWMP/TR-069 CPE simulator for testing ACS sessions, SOAP RPCs, diagnostics, transfers, and Connection Requests.",
   "type": "module",
@@ -21,7 +21,7 @@
     "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\"",
     "prepack": "npm run clean && npm run build",
     "prepublishOnly": "npm run check && npm run test",
-    "test": "node --test"
+    "test": "node --test \"test/**/*.test.ts\""
   },
   "keywords": [
     "cwmp",

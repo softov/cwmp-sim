@@ -360,7 +360,7 @@ cwmp-sim/
 │  ├─ xml-parser.ts        # Lightweight XML parser
 │  ├─ xml-utils.ts         # XML node/fault helpers
 │  └─ types.d.ts           # Shared simulator types
-└─ test/                   # Experimental/manual test scripts
+└─ test/                   # *.test.ts unit tests + legacy test-* scratch scripts
 ```
 
 ## Status
@@ -371,9 +371,15 @@ The project is intended for ACS testing, protocol debugging, and development env
 
 Known limitations and the planned roadmap are tracked in [PENDING.md](PENDING.md).
 
-## Testing Notes
+## Testing
 
-The `test/` directory contains experimental/manual scripts for diagnostics, IGD behavior, and Windows-oriented device information. The package-level `npm test` script (`node --test`) is not yet wired to run them.
+Unit tests use the built-in Node.js test runner (`node:test` / `node:assert`) and cover the deterministic modules — XML parser/utils, SOAP envelope helpers, model helpers, and the device data model (parameter get/set, read-only enforcement, AddObject/DeleteObject, change listeners):
+
+```bash
+npm test
+```
+
+The script targets `test/**/*.test.ts` only. The `test/test-*.{ts,js}` files are experimental/manual scratch scripts for diagnostics, IGD behavior, and Windows-oriented device information; they are intentionally excluded from `npm test` so they are not auto-executed.
 
 ## License
 
