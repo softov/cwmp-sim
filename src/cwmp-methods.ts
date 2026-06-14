@@ -254,7 +254,7 @@ function GetParameterNames(device: CWMPDevice, request: XmlNode): string {
 function SetParameterValues(device: CWMPDevice, request: XmlNode): string {
   // ... implementation ...
   let parameterValues = request.children[0].children;
-  let status = 0;
+  const failed: string[] = [];
 
   if (device._lastSetValues) {
     device._lastSetValues.clear();
@@ -272,11 +272,22 @@ function SetParameterValues(device: CWMPDevice, request: XmlNode): string {
     device._lastSetValues.set(name, value);
     if (!device.set(name, value)) {
       console.log(`Failed to update ${name}`);
-      status = 1;
+      failed.push(name);
     }
   }
 
   device._keepEvents = false;
+
+  // TR-069 Amendment 5, Section A.3.2.1: if one or more parameters cannot be
+  // set, the CPE MUST respond with a fault rather than a (false) success status.
+  if (failed.length) {
+    return xmlUtils.fault(
+      FAULTCODE_INVALID_WRITE,
+      "Invalid arguments",
+      `Unable to set parameter(s): ${failed.join(", ")}`
+    );
+  }
+
   for (let [name, value] of device._lastSetValues) {
     device.fireEvent('set', name, value)
   }
@@ -467,7 +478,7 @@ function Upload(device: CWMPDevice, request: XmlNode): string {
 
   // Validation: Check for upload already in progress
   const queuedTransfer = device._queuedTransfers.find((t) =>
-    t.isDownload &&
+    !t.isDownload &&
     (t.state === 1 || t.state === 2) // NotYetStarted or InProgress
   );
 
