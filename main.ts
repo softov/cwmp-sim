@@ -12,6 +12,7 @@ let options = {
     oui: process.env['DEVICE_OUI'] || "000000",
     productClass: process.env['DEVICE_PRODUCT_CLASS'] || "Simulator",
     csvPath: process.env['DEVICE_CSV'] || './models/data_model_test.csv',
+    jsonPath: process.env['DEVICE_JSON'] || './models/data_model_test.json',
   },
 
   acs: {
@@ -57,6 +58,7 @@ console.log(`  CPE: ${options.conn.addr}:${options.conn.port}`);
 console.log(`  Serial: ${options.device.serialNumber}`);
 console.log(`  Type: ${options.device.productClass}`);
 if (options.device.csvPath) console.log(`  CSV: ${options.device.csvPath}`);
+if (options.device.jsonPath) console.log(`  JSON: ${options.device.jsonPath}`);
 
 // Handle Exit to Save CSV
 process.on('SIGINT', () => {

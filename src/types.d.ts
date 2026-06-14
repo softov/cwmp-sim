@@ -52,6 +52,7 @@ export type CwmpDeviceOptions = {
   productClass?: string;
   serialNumber?: string;
   csvPath?: string;
+  jsonPath?: string;
 };
 
 export type CwmpSimulatorOptions = {

@@ -63,6 +63,7 @@ export default class CWMPDevice {
   _productClass = "Simulator";
   _serialNumber = "123456";
   _csvPath: string | null = null;
+  _jsonPath: string | null = null;
   _rootName: string = "Device";
   _rootTree: any;
   _keepEvents = false;
@@ -107,6 +108,7 @@ export default class CWMPDevice {
    */
   constructor(options: CwmpDeviceOptions) {
     if (options.csvPath != undefined) this._csvPath = options.csvPath;
+    if (options.jsonPath != undefined) this._jsonPath = options.jsonPath;
 
     this._manufacturer = options.manufacturer || "BrByte";
     this._rootName = options.rootName || "Device"; // Default to TR-098 as per user hint
@@ -123,8 +125,9 @@ export default class CWMPDevice {
     }
 
     const loadJSON = async () => {
-      // load JSON FILE
-      const jsonFile = `./models/data_model_B4CFE0.json`;
+      // Load an optional JSON data-model fixture to overlay on the default tree.
+      const jsonFile = this._jsonPath;
+      if (!jsonFile) return;
       try {
         const data = await fs.readFile(jsonFile);
         if (!data) return;
@@ -136,8 +139,12 @@ export default class CWMPDevice {
           defaultWritable: true,
           // writableKeys: new Set(['DiagnosticsState', 'DownloadURL', 'UploadURL', 'TestFileLength'])
         });
-      } catch (e) {
-        console.log(`Error loading JSON file: ${e}`);
+      } catch (e: any) {
+        if (e?.code === "ENOENT") {
+          console.log(`JSON model file not found, using defaults: ${jsonFile}`);
+        } else {
+          console.log(`Error loading JSON file '${jsonFile}': ${e}`);
+        }
       }
     }
     loadJSON();
