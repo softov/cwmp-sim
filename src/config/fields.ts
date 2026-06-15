@@ -1,4 +1,5 @@
 import type { CwmpSimulatorOptions } from "../types.ts";
+import { LOG_LEVELS, type LogLevel } from "../logger.ts";
 
 type ConfigSource = {
   env: NodeJS.ProcessEnv;
@@ -36,6 +37,14 @@ const asInt = (value: string): number => {
 };
 
 const asString = (value: string): string => value;
+
+const asLogLevel = (value: string): LogLevel => {
+  const normalized = value.trim().toLowerCase();
+
+  if ((LOG_LEVELS as string[]).includes(normalized)) return normalized as LogLevel;
+
+  throw new Error(`Invalid log level: ${value} (expected ${LOG_LEVELS.join("|")})`);
+};
 
 export const configFields: ConfigField<unknown>[] = [
   {
@@ -167,5 +176,14 @@ export const configFields: ConfigField<unknown>[] = [
     label: "Connection request auth mode",
     default: "none",
     parse: asString
+  },
+
+  {
+    path: "log.level",
+    env: "LOG_LEVEL",
+    flag: "--log-level",
+    label: "Log level (silent|error|warn|info|debug|trace)",
+    default: "info",
+    parse: asLogLevel
   }
 ] satisfies ConfigField<unknown>[];

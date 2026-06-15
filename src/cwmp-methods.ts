@@ -156,7 +156,7 @@ function _baseCaller(device: CWMPDevice, request: XmlNode): string {
  */
 function InformResponse(device: CWMPDevice, request: XmlNode): string {
   if (device._lastMethod !== "Inform") {
-    console.error("❌ Received InformResponse but expected response for " + device._lastMethod);
+    device._log.error("❌ Received InformResponse but expected response for " + device._lastMethod);
   }
   device.setLastMethod(null);
   // Default flow: Send Empty Request (Heartbeat)
@@ -271,7 +271,7 @@ function SetParameterValues(device: CWMPDevice, request: XmlNode): string {
     }
     device._lastSetValues.set(name, value);
     if (!device.set(name, value)) {
-      console.log(`Failed to update ${name}`);
+      device._log.warn(`Failed to update ${name}`);
       failed.push(name);
     }
   }
@@ -313,7 +313,7 @@ function AddObject(device: CWMPDevice, request: XmlNode): string {
     else if (c.localName === "ParameterKey") parameterKey = c.text;
   }
 
-  console.log(`AddObject requested. Object: ${objectName} Key: ${parameterKey}`);
+  device._log.debug(`AddObject requested. Object: ${objectName} Key: ${parameterKey}`);
 
   const [status, instanceNum] = device.addObject(objectName);
 
@@ -342,7 +342,7 @@ function DeleteObject(device: CWMPDevice, request: XmlNode): string {
     else if (c.localName === "ParameterKey") parameterKey = c.text;
   }
 
-  console.log(`DeleteObject requested. Object: ${objectName} Key: ${parameterKey}`);
+  device._log.debug(`DeleteObject requested. Object: ${objectName} Key: ${parameterKey}`);
 
   const status = device.deleteObject(objectName);
 
@@ -362,7 +362,7 @@ function DeleteObject(device: CWMPDevice, request: XmlNode): string {
  */
 function TransferCompleteResponse(device: CWMPDevice, request: XmlNode): string {
   if (device._lastMethod !== "TransferComplete") {
-    console.error("❌ Received TransferCompleteResponse but expected response for " + device._lastMethod);
+    device._log.error("❌ Received TransferCompleteResponse but expected response for " + device._lastMethod);
   }
   device.setLastMethod(null);
   return _baseCaller(device, request);
@@ -396,13 +396,13 @@ function Download(device: CWMPDevice, request: XmlNode): string {
 
   // Validation: FileType is required
   if (!fileType || fileType.trim() === "") {
-    console.error("❌ Download failed: FileType is required");
+    device._log.error("❌ Download failed: FileType is required");
     return xmlUtils.fault(FAULTCODE_INVALID_ARGUMENTS, "Invalid arguments", "FileType is required for Download RPC");
   }
 
   // Validation: URL is required
   if (!url || url.trim() === "") {
-    console.error("❌ Download failed: URL is required");
+    device._log.error("❌ Download failed: URL is required");
     return xmlUtils.fault(FAULTCODE_INVALID_ARGUMENTS, "Invalid arguments", "URL is required for Download RPC");
   }
 
@@ -413,11 +413,11 @@ function Download(device: CWMPDevice, request: XmlNode): string {
   );
 
   if (queuedTransfer) {
-    console.error(`❌ Download failed: Transfer already in progress (CommandKey: ${queuedTransfer.commandKey})`);
+    device._log.error(`❌ Download failed: Transfer already in progress (CommandKey: ${queuedTransfer.commandKey})`);
     return xmlUtils.fault(FAULTCODE_DOWNLOAD_FAILED, "Download failure", `Transfer already in progress with CommandKey: ${queuedTransfer.commandKey}`);
   }
 
-  console.log(`Download requested. URL: ${url}, FileType: ${fileType}, Key: ${commandKey}`);
+  device._log.debug(`Download requested. URL: ${url}, FileType: ${fileType}, Key: ${commandKey}`);
 
   const task = new TaskDownload(device, {
     commandKey,
@@ -466,13 +466,13 @@ function Upload(device: CWMPDevice, request: XmlNode): string {
 
   // Validation: FileType is required
   if (!fileType || fileType.trim() === "") {
-    console.error("❌ Upload failed: FileType is required");
+    device._log.error("❌ Upload failed: FileType is required");
     return xmlUtils.fault(FAULTCODE_INVALID_ARGUMENTS, "Invalid arguments", "FileType is required for Upload RPC");
   }
 
   // Validation: URL is required
   if (!url || url.trim() === "") {
-    console.error("❌ Upload failed: URL is required");
+    device._log.error("❌ Upload failed: URL is required");
     return xmlUtils.fault(FAULTCODE_INVALID_ARGUMENTS, "Invalid arguments", "URL is required for Upload RPC");
   }
 
@@ -483,11 +483,11 @@ function Upload(device: CWMPDevice, request: XmlNode): string {
   );
 
   if (queuedTransfer) {
-    console.error(`❌ Upload failed: Transfer already in progress (CommandKey: ${queuedTransfer.commandKey})`);
+    device._log.error(`❌ Upload failed: Transfer already in progress (CommandKey: ${queuedTransfer.commandKey})`);
     return xmlUtils.fault(FAULTCODE_UPLOAD_FAILED, "Upload failure", `Transfer already in progress with CommandKey: ${queuedTransfer.commandKey}`);
   }
 
-  console.log(`Upload requested. URL: ${url}, FileType: ${fileType}, Key: ${commandKey}`);
+  device._log.debug(`Upload requested. URL: ${url}, FileType: ${fileType}, Key: ${commandKey}`);
 
   const task = new TaskUpload(device, {
     commandKey,
@@ -519,7 +519,7 @@ function Upload(device: CWMPDevice, request: XmlNode): string {
  * @returns {string} The RebootResponse XML.
  */
 function Reboot(device: CWMPDevice, request: XmlNode): string {
-  console.log("Reboot requested.");
+  device._log.debug("Reboot requested.");
   device.setLastMethod('RebootResponse');
   device._pendingReboot = true;
   let response = xmlUtils.node("cwmp:RebootResponse", {}, "");
@@ -536,7 +536,7 @@ function Reboot(device: CWMPDevice, request: XmlNode): string {
  * @returns {string} The FactoryResetResponse XML.
  */
 function FactoryReset(device: CWMPDevice, request: XmlNode): string {
-  console.log("FactoryReset requested.");
+  device._log.debug("FactoryReset requested.");
   device.setLastMethod('FactoryResetResponse');
   device._pendingFactoryReset = true;
   let response = xmlUtils.node("cwmp:FactoryResetResponse", {}, "");
@@ -553,7 +553,7 @@ function FactoryReset(device: CWMPDevice, request: XmlNode): string {
  * @returns {string} The GetRPCMethodsResponse XML.
  */
 function GetRPCMethods(device: CWMPDevice, request: XmlNode): string {
-  console.log("GetRPCMethods requested.");
+  device._log.debug("GetRPCMethods requested.");
 
   let methodList = SUPPORTED_METHODS.map(m => xmlUtils.node("string", {}, m));
 
@@ -595,7 +595,7 @@ function SetParameterAttributes(device: CWMPDevice, request: XmlNode): string {
       }
     }
 
-    console.log(`SetParameterAttributes: ${name} notification=${notification} accessList=[${accessList.join(", ")}]`);
+    device._log.debug(`SetParameterAttributes: ${name} notification=${notification} accessList=[${accessList.join(", ")}]`);
 
     // Store attributes
     let existing = device._parameterAttributes.get(name) || { notification: 0, accessList: [] };
@@ -659,7 +659,7 @@ function ScheduleInform(device: CWMPDevice, request: XmlNode): string {
     else if (c.localName === "CommandKey") commandKey = c.text;
   }
 
-  console.log(`ScheduleInform requested. Delay: ${delaySeconds}s, Key: ${commandKey}`);
+  device._log.debug(`ScheduleInform requested. Delay: ${delaySeconds}s, Key: ${commandKey}`);
 
   // Schedule the inform
   const scheduleTime = new Date(Date.now() + delaySeconds * 1000).toISOString();
@@ -683,7 +683,7 @@ function ScheduleInform(device: CWMPDevice, request: XmlNode): string {
  * @returns {string} The GetQueuedTransfersResponse XML.
  */
 function GetQueuedTransfers(device: CWMPDevice, request: XmlNode): string {
-  console.log("GetQueuedTransfers requested (basic struct).");
+  device._log.debug("GetQueuedTransfers requested (basic struct).");
 
   let transfers = device._queuedTransfers.map((t) => {
     return xmlUtils.node("QueuedTransferStruct", {}, [
@@ -710,7 +710,7 @@ function GetQueuedTransfers(device: CWMPDevice, request: XmlNode): string {
  * @returns {string} The GetAllQueuedTransfersResponse XML.
  */
 function GetAllQueuedTransfers(device: CWMPDevice, request: XmlNode): string {
-  console.log("GetAllQueuedTransfers requested (extended struct).");
+  device._log.debug("GetAllQueuedTransfers requested (extended struct).");
 
   let transfers = device._queuedTransfers.map((t) => {
     return xmlUtils.node("AllQueuedTransferStruct", {}, [
@@ -760,7 +760,7 @@ function ScheduleDownload(device: CWMPDevice, request: XmlNode): string {
     else if (c.localName === "TimeWindowEnd") timeWindowEnd = parseInt(c.text || "0");
   }
 
-  console.log(`ScheduleDownload requested. URL: ${url}, Key: ${commandKey}`);
+  device._log.debug(`ScheduleDownload requested. URL: ${url}, Key: ${commandKey}`);
 
   // Add to queue
   device._queuedTransfers.push({
@@ -796,7 +796,7 @@ function CancelTransfer(device: CWMPDevice, request: XmlNode): string {
     if (c.localName === "CommandKey") commandKey = c.text;
   }
 
-  console.log(`CancelTransfer requested. Key: ${commandKey}`);
+  device._log.debug(`CancelTransfer requested. Key: ${commandKey}`);
 
   // Find and remove from queue
   const index = device._queuedTransfers.findIndex(t => t.commandKey === commandKey);

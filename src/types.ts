@@ -1,3 +1,4 @@
+import type { Logger, LogLevel, LoggerSink } from "./logger.ts";
 
 export type XmlNode = {
   name: string;
@@ -47,11 +48,24 @@ export type CwmpDeviceOptions = {
   serialNumber?: string;
   csvPath?: string;
   jsonPath?: string;
+  logger?: Logger;
+};
+
+export type CwmpLogOptions = {
+  /** Verbosity threshold. Omitted → silent (library default). */
+  level?: LogLevel;
+  /** Bring-your-own logger (e.g. pino/winston); used as-is when provided. */
+  logger?: Logger;
+  /** Prepended to every message (e.g. a device serial). */
+  prefix?: string;
+  /** Low-level emitter override for the built-in logger. */
+  sink?: LoggerSink;
 };
 
 export type CwmpSimulatorOptions = {
   device: CwmpDeviceOptions;
   conn: CwmpConnOptions;
   acs: CwmpAcsOptions;
+  log?: CwmpLogOptions;
 };
 

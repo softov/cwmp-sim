@@ -5,6 +5,7 @@ import * as http from 'http';
 import * as https from 'https';
 import * as crypto from 'crypto';
 import type { CwmpConnOptions } from './types.ts';
+import { NULL_LOGGER, type Logger } from './logger.ts';
 
 function md5(data: string) {
   return crypto.createHash("md5").update(data).digest("hex");
@@ -33,6 +34,7 @@ export default class CWMPConn {
   _netConfig: net.NetConnectOpts = null;
   _server: http.Server | https.Server = null;
   _logVerbose = true;
+  _log: Logger = NULL_LOGGER;
   _onRequest: (event: string) => void = null;
   _onListening: () => void = null;
   _requestOptions: any = null;
@@ -42,7 +44,8 @@ export default class CWMPConn {
    * @param {string} acsUrl - The URL to detect IP (DAMMM!!!)
    * @param {object} options - Configuration options.
    */
-  constructor(acsUrl: string, options: CwmpConnOptions) {
+  constructor(acsUrl: string, options: CwmpConnOptions, logger: Logger = NULL_LOGGER) {
+    this._log = logger;
     this._options = {
       authMode: 'Digest',
       addr: '0.0.0.0',
@@ -94,7 +97,7 @@ export default class CWMPConn {
       let socket = net.createConnection(this._netConfig)
         .on("error", reject)
         .on("connect", () => {
-          console.log('connect address');
+          this._log.debug('connect address');
           const address = socket.address();
           if (typeof address === 'object' && address !== null) {
             if ('address' in address) listenAddr = address.address;
@@ -110,7 +113,7 @@ export default class CWMPConn {
               res.end();
               return;
             }
-            if (this._logVerbose) console.log(`Simulator ${listenAddr}:${listenPort} got connection request`);
+            if (this._logVerbose) this._log.debug(`Simulator ${listenAddr}:${listenPort} got connection request`);
             this.emit('requested');
             this.handleRequest(req, res);
 
@@ -121,8 +124,8 @@ export default class CWMPConn {
             // listenPort = typeof theAddr === 'object' && theAddr !== null ? theAddr.port : listenPort;
             const newUrl = `${this._options.ssl ? 'https' : 'http'}://${listenAddr}:${listenPort}/`;
             if (this._logVerbose) {
-              console.log(`Simulator ${listenAddr}:${listenPort} Connection Request Server listening on ${newUrl}`);
-              console.log(`Simulator`, this._server.address());
+              this._log.info(`Simulator ${listenAddr}:${listenPort} Connection Request Server listening on ${newUrl}`);
+              this._log.debug(`Simulator`, this._server.address());
             }
             this.emit('listening');
             resolve({
@@ -182,7 +185,7 @@ export default class CWMPConn {
       }
     }
 
-    console.log("Received Connection Request");
+    this._log.info("Received Connection Request");
     res.writeHead(200);
     res.end();
 

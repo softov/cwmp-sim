@@ -35,7 +35,7 @@ export default class DiagPing extends CWMPTask {
       ? "Device.IP.Diagnostics.IPPing"
       : "InternetGatewayDevice.IPPingDiagnostics";
     this._device.addListener(`${this._key}.DiagnosticsState`, (val: string) => {
-      console.log(`${this._key}.DiagnosticsState changed ${val}`);
+      this._device._log.debug(`${this._key}.DiagnosticsState changed ${val}`);
       this.dispatch();
     });
   }
@@ -49,18 +49,18 @@ export default class DiagPing extends CWMPTask {
       return;
     }
     if (state == "None") {
-      console.log(`DiagnosticsState not found`);
+      this._device._log.debug(`DiagnosticsState not found`);
       return;
     }
     if (state !== "Requested") {
-      console.log(`DiagnosticsState is not Requested, current state: ${state}`);
+      this._device._log.debug(`DiagnosticsState is not Requested, current state: ${state}`);
       return;
     }
 
     // 1. Validation
     this._options._host = this._device.getValue(`${this._key}.Host`);
     if (!this._options._host || this._options._host.length > 256) {
-      console.log(`Host is not valid, current host: ${this._options._host}`);
+      this._device._log.debug(`Host is not valid, current host: ${this._options._host}`);
       this._device.set(`${this._key}.DiagnosticsState`, "Error_CannotResolveHostName");
       return;
     }
@@ -70,7 +70,7 @@ export default class DiagPing extends CWMPTask {
     this._options._dataBlockSize = parseInt(this._device.getValue(`${this._key}.DataBlockSize`) || '32');
 
     if (this._options._repetitions < 1 || this._options._timeout < 1 || this._options._dataBlockSize < 1) {
-      console.log(`Repetitions, timeout or dataBlockSize is not valid, current values: ${this._options._repetitions}, ${this._options._timeout}, ${this._options._dataBlockSize}`);
+      this._device._log.debug(`Repetitions, timeout or dataBlockSize is not valid, current values: ${this._options._repetitions}, ${this._options._timeout}, ${this._options._dataBlockSize}`);
       this._device.set(`${this._key}.DiagnosticsState`, "Error_Other");
       return;
     }
@@ -84,21 +84,21 @@ export default class DiagPing extends CWMPTask {
    */
   run() {
     if (!this._isRequested) return;
-    console.log(`[${this._type}] run requested`);
+    this._device._log.debug(`[${this._type}] run requested`);
     this._isRequested = false;
     this._isRunning = true;
     this._result._host = this._options._host;
 
-    console.log("Starting Ping Diagnostic...");
+    this._device._log.debug("Starting Ping Diagnostic...");
 
     // 2. Execution (Windows ping syntax)
     // ping -n <count> -w <timeout> -l <size> <host>
     const cmd = `ping -n ${this._options._repetitions} -w ${this._options._timeout} -l ${this._options._dataBlockSize} ${this._options._host}`;
-    console.log(`Executing: ${cmd}`);
+    this._device._log.debug(`Executing: ${cmd}`);
 
     exec(cmd, (error, stdout, stderr) => {
       // 3. Parsing Results
-      console.log("Ping Output:\n", stdout);
+      this._device._log.debug("Ping Output:\n", stdout);
 
       this._result._successCount = 0;
       this._result._failureCount = 0;
@@ -129,7 +129,7 @@ export default class DiagPing extends CWMPTask {
         this._result._avgTime = parseInt(timeMatch[3]);
       }
 
-      console.log('Result:', this._result);
+      this._device._log.debug('Result:', this._result);
 
       this.finish();
     });
@@ -139,7 +139,7 @@ export default class DiagPing extends CWMPTask {
    * Updates the device model with ping results and marks diagnostics as complete.
    */
   finish() {
-    console.log(`Task [${this._type}] Complete:`, this._result);
+    this._device._log.debug(`Task [${this._type}] Complete:`, this._result);
     this._device.set(`${this._key}.Host`, `${this._result._host}`, true);
     this._device.set(`${this._key}.SuccessCount`, `${this._result._successCount}`, true);
     this._device.set(`${this._key}.FailureCount`, `${this._result._failureCount}`, true);

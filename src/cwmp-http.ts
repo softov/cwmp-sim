@@ -2,6 +2,7 @@
 import http from "http";
 import https from "https";
 import crypto from "crypto";
+import { NULL_LOGGER, type Logger } from "./logger.ts";
 
 type DigestParams = {
   realm?: string;
@@ -22,6 +23,7 @@ type RequestParams = {
   transport?: HttpTransport;
   agent?: http.Agent;
   cookies?: string[];
+  logger?: Logger;
 }
 
 function md5(data: string) {
@@ -110,6 +112,7 @@ export async function requestWithDigest(options: RequestParams = {
   const password = options.password;
   const body = options.body;
   const agent = options.agent;
+  const log = options.logger ?? NULL_LOGGER;
 
   function doAuthHeader(headers: Record<string, string>) {
     if (options.digest) {
@@ -153,17 +156,17 @@ export async function requestWithDigest(options: RequestParams = {
         res.on("data", (c) => (data += c));
         res.on("end", () => resolve({ res, data }));
         res.on("error", (e: Error) => {
-          console.error(`Response error: ${e.message}`);
+          log.error(`Response error: ${e.message}`);
           reject(e);
         });
       }
       );
       req.on("error", (e: Error) => {
-        console.error(`Request error: ${e.message}`);
+        log.error(`Request error: ${e.message}`);
         reject(e);
       });
       req.setTimeout(30000, () => {
-        console.log(`Request timed out after ${30} seconds.`);
+        log.warn(`Request timed out after ${30} seconds.`);
         reject(new Error(`Request timed out after ${30} seconds.`));
       });
       if (body !== undefined) {
@@ -205,6 +208,7 @@ export default class CwmpHttp {
   _transport: HttpTransport;
   _requestParams: RequestParams;
   _requestUrl: URL;
+  _log: Logger = NULL_LOGGER;
 
   /**
    * Creates a new CwmpHttp instance.
@@ -212,6 +216,7 @@ export default class CwmpHttp {
    */
   constructor(params: RequestParams) {
     this._requestParams = params;
+    this._log = params?.logger ?? NULL_LOGGER;
     if (!this._requestParams) {
       throw new Error("Request params are required");
     }
@@ -256,6 +261,7 @@ export default class CwmpHttp {
     this._requestParams.transport = this._transport;
     this._requestParams.agent = this._agent;
     this._requestParams.body = xml;
+    this._requestParams.logger = this._log;
 
     const { res, body } = await requestWithDigest(this._requestParams);
 

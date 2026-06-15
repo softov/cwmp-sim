@@ -9,6 +9,7 @@ import DiagDownload from "./diag-download.ts";
 import DiagUpload from "./diag-upload.ts";
 import DiagWifi from "./diag-wifi.ts";
 import CWMPTask from "./cwmp-task.ts";
+import { NULL_LOGGER, type Logger } from "./logger.ts";
 
 function inferXsdType(value: any): string {
   if (typeof value === 'boolean') return 'xsd:boolean';
@@ -64,6 +65,7 @@ export default class CWMPDevice {
   _serialNumber = "123456";
   _csvPath: string | null = null;
   _jsonPath: string | null = null;
+  _log: Logger = NULL_LOGGER;
   _rootName: string = "Device";
   _rootTree: any;
   _keepEvents = false;
@@ -109,6 +111,7 @@ export default class CWMPDevice {
   constructor(options: CwmpDeviceOptions) {
     if (options.csvPath != undefined) this._csvPath = options.csvPath;
     if (options.jsonPath != undefined) this._jsonPath = options.jsonPath;
+    if (options.logger) this._log = options.logger;
 
     this._manufacturer = options.manufacturer || "BrByte";
     this._rootName = options.rootName || "Device"; // Default to TR-098 as per user hint
@@ -141,9 +144,9 @@ export default class CWMPDevice {
         });
       } catch (e: any) {
         if (e?.code === "ENOENT") {
-          console.log(`JSON model file not found, using defaults: ${jsonFile}`);
+          this._log.debug(`JSON model file not found, using defaults: ${jsonFile}`);
         } else {
-          console.log(`Error loading JSON file '${jsonFile}': ${e}`);
+          this._log.warn(`Error loading JSON file '${jsonFile}': ${e}`);
         }
       }
     }
@@ -225,25 +228,25 @@ export default class CWMPDevice {
     const task = this._pendingTask[0];
 
     if (task._timeoutId) {
-      console.log(`Task [${task._type}] timeout`, task._timeoutId);
+      this._log.debug(`Task [${task._type}] timeout`, task._timeoutId);
       this._pendingTimeout = setTimeout(() => this.runTask(), 1000);
       return;
     }
 
     if (task._isRunning) {
-      console.log(`Task [${task._type}] running`, task._isRunning);
+      this._log.debug(`Task [${task._type}] running`, task._isRunning);
       this._pendingTimeout = setTimeout(() => this.runTask(), 500);
       return;
     }
 
     if (task._isRequested) {
-      console.log(`Task [${task._type}] going to run`);
+      this._log.debug(`Task [${task._type}] going to run`);
       task.run();
       this._pendingTimeout = setTimeout(() => this.runTask(), 1000);
       return;
     }
 
-    console.log(`Task [${task._type}] finished`);
+    this._log.debug(`Task [${task._type}] finished`);
     // Not running and not requested means it finished (or was never valid)
     this._pendingTask.shift();
     this._pendingTimeout = setTimeout(() => this.runTask(), 1000);
@@ -271,7 +274,7 @@ export default class CWMPDevice {
    */
   getNextMessage() {
     if (!this._pendingMessages || this._pendingMessages.length === 0) return null;
-    console.log('Get Next Message', this._pendingMessages.length);
+    this._log.debug('Get Next Message', this._pendingMessages.length);
     return this._pendingMessages.shift();
   }
 
@@ -330,7 +333,7 @@ export default class CWMPDevice {
     if (node && (force || node._value !== undefined)) {
       if (node._writable || force) {
         node._value = value;
-        console.log(`Set ${path} to ${value}`);
+        this._log.debug(`Set ${path} to ${value}`);
         if (typeof node.funcSet === 'function') {
           node.funcSet();
         }
@@ -686,6 +689,6 @@ export default class CWMPDevice {
   }
 
   exportCSV(path: string) {
-    console.log(`Mock exporting CSV to ${path}`);
+    this._log.info(`Mock exporting CSV to ${path}`);
   }
 }

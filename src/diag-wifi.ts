@@ -23,7 +23,7 @@ export default class DiagWifi extends CWMPTask {
       : "InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.NeighboringWiFiDiagnostic";
 
     this._device.addListener(`${this._key}.DiagnosticsState`, (val) => {
-      console.log(`${this._key}.DiagnosticsState changed ${val}`);
+      this._device._log.debug(`${this._key}.DiagnosticsState changed ${val}`);
       this.dispatch();
     });
   }
@@ -44,12 +44,12 @@ export default class DiagWifi extends CWMPTask {
    * Simulates the WiFi diagnostic process (with a delay).
    */
   run() {
-    console.log(`[${this._type}] run requested`);
+    this._device._log.debug(`[${this._type}] run requested`);
     if (!this._isRequested) return;
     this._isRequested = false;
     this._isRunning = true;
 
-    console.log("Starting WiFi Diagnostic (Simulated)...");
+    this._device._log.debug("Starting WiFi Diagnostic (Simulated)...");
 
     setTimeout(() => {
       this.finish();
@@ -60,7 +60,7 @@ export default class DiagWifi extends CWMPTask {
    * Updates the device model with simulated WiFi results and marks diagnostics as complete.
    */
   finish(): void {
-    console.log(`Task [${this._type}] Complete:`, this._result);
+    this._device._log.debug(`Task [${this._type}] Complete:`, this._result);
     this._device.set(`${this._key}.DiagnosticsState`, "Complete");
     this._device.set(`${this._key}.ResultNumberOfEntries`, "2");
 

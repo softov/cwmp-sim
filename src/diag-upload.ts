@@ -44,7 +44,7 @@ export default class DiagUpload extends CWMPTask {
       : "InternetGatewayDevice.UploadDiagnostics";
 
     this._device.addListener(`${this._key}.DiagnosticsState`, (val) => {
-      console.log(`${this._key}.DiagnosticsState changed ${val}`);
+      this._device._log.debug(`${this._key}.DiagnosticsState changed ${val}`);
       this.dispatch();
     });
   }
@@ -89,7 +89,7 @@ export default class DiagUpload extends CWMPTask {
     this._isRequested = false;
     this._isRunning = true;
 
-    console.log(`Starting Upload Diagnostic: ${this._options._url} (${this._options._testFileLength} bytes)`);
+    this._device._log.debug(`Starting Upload Diagnostic: ${this._options._url} (${this._options._testFileLength} bytes)`);
 
     // Generate test data buffer
     const testData = Buffer.alloc(this._options._testFileLength, 0x41); // Fill with 'A'
@@ -108,7 +108,8 @@ export default class DiagUpload extends CWMPTask {
       uri: this._options._url,
       username: this._options._username,
       password: this._options._password,
-      body: testData
+      body: testData,
+      logger: this._device._log,
     }).then(({ res, body }) => {
       // BOMTime: Beginning of upload
       if (!this._result._bomTime) {
@@ -119,11 +120,11 @@ export default class DiagUpload extends CWMPTask {
       this._result._eomTime = new Date().toISOString();
 
       if (!res || (res.statusCode !== 200 && res.statusCode !== 201 && res.statusCode !== 204)) {
-        console.error("Upload failed:", res?.statusCode);
+        this._device._log.error("Upload failed:", res?.statusCode);
         this._result._faultCode = "Error_TransferFailed";
         this._result._faultString = `HTTP ${res?.statusCode}`;
       } else {
-        console.log(`Upload successful: ${testData.length} bytes sent`);
+        this._device._log.debug(`Upload successful: ${testData.length} bytes sent`);
 
         // TestBytesSent: actual payload bytes
         this._result._testBytesSent = testData.length;
@@ -141,7 +142,7 @@ export default class DiagUpload extends CWMPTask {
       }
       this.finish();
     }).catch((err) => {
-      console.error("Upload error:", err.message);
+      this._device._log.error("Upload error:", err.message);
       this._result._eomTime = new Date().toISOString();
       this._result._faultCode = "Error_TransferFailed";
       this._result._faultString = err.message;
@@ -153,7 +154,7 @@ export default class DiagUpload extends CWMPTask {
    * Updates the device model with upload results and marks diagnostics as complete.
    */
   finish() {
-    console.log(`Task [${this._type}] Complete:`, this._result);
+    this._device._log.debug(`Task [${this._type}] Complete:`, this._result);
 
     if (this._result._faultCode) {
       this._device.set(`${this._key}.DiagnosticsState`, this._result._faultCode, true);

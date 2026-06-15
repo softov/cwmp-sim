@@ -39,7 +39,7 @@ export default class DiagDownload extends CWMPTask {
       : "InternetGatewayDevice.DownloadDiagnostics";
 
     this._device.addListener(`${this._key}.DiagnosticsState`, (val: string) => {
-      console.log(`${this._key}.DiagnosticsState changed ${val}`);
+      this._device._log.debug(`${this._key}.DiagnosticsState changed ${val}`);
       this.dispatch();
     });
   }
@@ -50,7 +50,7 @@ export default class DiagDownload extends CWMPTask {
   dispatch() {
     this._isRequested = false;
     const state = this._device.getValue(`${this._key}.DiagnosticsState`);
-    console.log(`${this._key}.DiagnosticsState dispatch ${state}`);
+    this._device._log.debug(`${this._key}.DiagnosticsState dispatch ${state}`);
     if (state !== "Requested") {
       return;
     }
@@ -74,11 +74,11 @@ export default class DiagDownload extends CWMPTask {
    */
   run() {
     if (!this._isRequested) return;
-    console.log(`[${this._type}] run requested`);
+    this._device._log.debug(`[${this._type}] run requested`);
     this._isRequested = false;
     this._isRunning = true;
 
-    console.log(`Starting Download Diagnostic: ${this._options._url}`);
+    this._device._log.debug(`Starting Download Diagnostic: ${this._options._url}`);
 
     // ROMTime: Request sent time
     this._result._romTime = new Date().toISOString();
@@ -88,6 +88,7 @@ export default class DiagDownload extends CWMPTask {
       uri: this._options._url,
       username: this._options._username,
       password: this._options._password,
+      logger: this._device._log,
     }).then(({ res, body }) => {
       // BOMTime: Beginning of download
       if (!this._result._bomTime) {
@@ -98,14 +99,14 @@ export default class DiagDownload extends CWMPTask {
       this._result._eomTime = new Date().toISOString();
 
       if (!res || (res.statusCode !== 200 && res.statusCode !== 204 && res.statusCode !== 206)) {
-        console.error("Download failed:", res?.statusCode);
+        this._device._log.error("Download failed:", res?.statusCode);
         this._result._faultCode = "Error_TransferFailed";
         this._result._faultString = `HTTP ${res?.statusCode}`;
       } else if (res.statusCode === 204) {
         this._result._faultCode = "Error_TransferFailed";
         this._result._faultString = "HTTP 204";
       } else {
-        console.log(`Download successful: ${body.length} bytes received`);
+        this._device._log.debug(`Download successful: ${body.length} bytes received`);
 
         // TestBytesReceived: actual payload bytes
         this._result._testBytesReceived = body.length;
@@ -122,7 +123,7 @@ export default class DiagDownload extends CWMPTask {
       }
       this.finish();
     }).catch((err) => {
-      console.error("Download error:", err.message);
+      this._device._log.error("Download error:", err.message);
       this._result._eomTime = new Date().toISOString();
       this._result._faultCode = "Error_TransferFailed";
       this._result._faultString = err.message;
@@ -134,7 +135,7 @@ export default class DiagDownload extends CWMPTask {
    * Updates the device model with download results and marks diagnostics as complete.
    */
   finish() {
-    console.log(`Task [${this._type}] Complete:`, this._result);
+    this._device._log.debug(`Task [${this._type}] Complete:`, this._result);
 
     if (this._result._faultCode) {
       this._device.set(`${this._key}.DiagnosticsState`, this._result._faultCode, true);

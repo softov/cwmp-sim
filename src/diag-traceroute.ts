@@ -31,7 +31,7 @@ export default class DiagTraceroute extends CWMPTask {
       : "InternetGatewayDevice.TraceRouteDiagnostics";
 
     this._device.addListener(`${this._key}.DiagnosticsState`, (val) => {
-      console.log(`${this._key}.DiagnosticsState changed ${val}`);
+      this._device._log.debug(`${this._key}.DiagnosticsState changed ${val}`);
       this.dispatch();
     });
   }
@@ -70,11 +70,11 @@ export default class DiagTraceroute extends CWMPTask {
    */
   run() {
     if (!this._isRequested) return;
-    console.log(`[${this._type}] run requested`);
+    this._device._log.debug(`[${this._type}] run requested`);
     this._isRequested = false;
     this._isRunning = true;
 
-    console.log("Starting Traceroute Diagnostic...");
+    this._device._log.debug("Starting Traceroute Diagnostic...");
     const path = this._key;
     const hopPrefix = this._device._rootName === "Device" ? '' : 'Hop';
 
@@ -82,12 +82,12 @@ export default class DiagTraceroute extends CWMPTask {
     // tracert -h <max_hops> -w <timeout> -d <host> (-d to verify no DNS resolution if not requested, but usually standard is fine)
     // -d prevents reverse DNS lookup which speeds it up
     const cmd = `tracert -h ${this._options._maxHopCount} -w ${this._options._timeout} -d ${this._options._host}`;
-    console.log(`Executing: ${cmd}`);
+    this._device._log.debug(`Executing: ${cmd}`);
 
     this._device.set(`${path}DiagnosticsState`, "Requested"); // While running
 
     exec(cmd, (error, stdout, stderr) => {
-      console.log("Traceroute Output:\n", stdout);
+      this._device._log.debug("Traceroute Output:\n", stdout);
 
       // 3. Parsing Results
       const lines = stdout.split('\n');
@@ -133,7 +133,7 @@ export default class DiagTraceroute extends CWMPTask {
    * Updates the device model with traceroute results and marks diagnostics as complete.
    */
   finish() {
-    console.log(`Task [${this._type}] Complete:`, this._result);
+    this._device._log.debug(`Task [${this._type}] Complete:`, this._result);
     this._device.set(`${this._key}.DiagnosticsState`, "Complete", true);
     this._device.set(`${this._key}.RouteHopsNumberOfEntries`, `${this._result._hopCount}`, true);
     this._device.set(`${this._key}.ResponseTime`, `${this._result._lastResponseTime}`, true);

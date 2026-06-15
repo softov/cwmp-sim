@@ -54,7 +54,7 @@ export default class TaskDownload extends CWMPTask {
    * Dispatches the download task, respecting the optional delay.
    */
   dispatch(): void {
-    console.log(`[${this._type}] dispatch - delay ${this._options.delay}`);
+    this._device._log.debug(`[${this._type}] dispatch - delay ${this._options.delay}`);
     if (this._timeoutId) {
       clearTimeout(this._timeoutId);
     }
@@ -70,27 +70,28 @@ export default class TaskDownload extends CWMPTask {
    */
   run() {
     this._isRunning = true;
-    console.log(`[${this._type}] Type: [${this._options.fileType}] URL: [${this._options.url}] Key: [${this._options.commandKey}]`);
+    this._device._log.debug(`[${this._type}] Type: [${this._options.fileType}] URL: [${this._options.url}] Key: [${this._options.commandKey}]`);
     this._result._startTime = new Date().toISOString();
     requestWithDigest({
       method: "GET",
       uri: this._options.url,
       username: this._options.username,
       password: this._options.password,
+      logger: this._device._log,
     }).then(({ res, body }) => {
       if (!res || res.statusCode !== 200) {
-        console.error("Download failed:", res?.statusCode);
+        this._device._log.error("Download failed:", res?.statusCode);
         this._result._faultCode = "9010";
         this._result._faultString = "Download failed: " + res?.statusCode;
       } else {
-        console.log("Download successful.");
+        this._device._log.debug("Download successful.");
         this._result._faultCode = "0";
         this._result._faultString = "";
       }
       this._result._completeTime = new Date().toISOString();
       this.finish();
     }).catch((err) => {
-      console.error("Download failed:", err.message);
+      this._device._log.error("Download failed:", err.message);
       this._result._faultCode = "9010";
       this._result._faultString = "Download failed: " + err.message;
       this.finish();
@@ -101,7 +102,7 @@ export default class TaskDownload extends CWMPTask {
    * finalizes the download task and queues the TransferComplete message.
    */
   finish() {
-    console.log(`Task [${this._type}] Complete:`, this._result);
+    this._device._log.debug(`Task [${this._type}] Complete:`, this._result);
     this._device.addMessage(() => {
       let faultStruct = xmlUtils.node("FaultStruct", {}, [
         xmlUtils.node("FaultCode", {}, this._result._faultCode),

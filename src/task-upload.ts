@@ -77,7 +77,7 @@ export default class TaskUpload extends CWMPTask {
    * Dispatches the upload task, respecting the optional delay.
    */
   dispatch(): void {
-    console.log(`[${this._type}] dispatch - delay ${this._options.delay}`);
+    this._device._log.debug(`[${this._type}] dispatch - delay ${this._options.delay}`);
     if (this._timeoutId) {
       clearTimeout(this._timeoutId);
     }
@@ -94,11 +94,11 @@ export default class TaskUpload extends CWMPTask {
    */
   run() {
     this._isRunning = true;
-    console.log(`[${this._type}] Type: [${this._options.fileType}] URL: [${this._options.url}] Key: [${this._options.commandKey}]`);
+    this._device._log.debug(`[${this._type}] Type: [${this._options.fileType}] URL: [${this._options.url}] Key: [${this._options.commandKey}]`);
     this._result._startTime = new Date().toISOString();
 
     if (!this._options.fileType) {
-      console.error(`Missing FileType`);
+      this._device._log.error(`Missing FileType`);
       this._result._faultCode = "9010";
       this._result._faultString = "Missing FileType";
       this._result._completeTime = new Date().toISOString();
@@ -111,13 +111,13 @@ export default class TaskUpload extends CWMPTask {
     // Handle Vendor Extensions (X <OUI> ...) or unknown, map to generic vendor file
     if (!fileInfo) {
       if (this._options.fileType.startsWith("X ") || this._options.fileType.startsWith("X_")) {
-        console.log(`Mapping unknown vendor type '${this._options.fileType}' to generic vendor LOG file.`);
+        this._device._log.debug(`Mapping unknown vendor type '${this._options.fileType}' to generic vendor LOG file.`);
         fileInfo = FILETYPE_MAP["4 Vendor Log File"];
       }
     }
 
     if (!fileInfo) {
-      console.error(`Unknown FileType: ${this._options.fileType}`);
+      this._device._log.error(`Unknown FileType: ${this._options.fileType}`);
       this._result._faultCode = "9010"; // Download failure (using same code for upload failure generally?) or 9011
       this._result._faultString = `Unknown FileType: ${this._options.fileType}`;
       this._result._completeTime = new Date().toISOString();
@@ -127,7 +127,7 @@ export default class TaskUpload extends CWMPTask {
 
     fs.readFile(fileInfo.path, (err, data) => {
       if (err) {
-        console.error(`Failed to read file: ${fileInfo.path}`, err);
+        this._device._log.error(`Failed to read file: ${fileInfo.path}`, err);
         this._result._faultCode = "9010";
         this._result._faultString = `File read error: ${err.message}`;
         this._result._completeTime = new Date().toISOString();
@@ -135,29 +135,30 @@ export default class TaskUpload extends CWMPTask {
         return;
       }
 
-      console.log(`Read ${data.length} bytes from ${fileInfo.path}. Uploading...`);
+      this._device._log.debug(`Read ${data.length} bytes from ${fileInfo.path}. Uploading...`);
 
       requestWithDigest({
         method: "PUT",
         uri: this._options.url,
         username: this._options.username,
         password: this._options.password,
-        body: data
+        body: data,
+        logger: this._device._log,
       }).then(({ res, body }) => {
         if (!res || res.statusCode !== 200 && res.statusCode !== 201 && res.statusCode !== 204) {
           // 201 Created, 204 No Content are also success for PUT sometimes
-          console.error("Upload failed:", res?.statusCode);
+          this._device._log.error("Upload failed:", res?.statusCode);
           this._result._faultCode = "9010"; // Upload failure
           this._result._faultString = "Upload failed: " + res?.statusCode;
         } else {
-          console.log("Upload successful.");
+          this._device._log.debug("Upload successful.");
           this._result._faultCode = "0";
           this._result._faultString = "";
         }
         this._result._completeTime = new Date().toISOString();
         this.finish();
       }).catch((err) => {
-        console.error("Upload failed:", err.message);
+        this._device._log.error("Upload failed:", err.message);
         this._result._faultCode = "9010";
         this._result._faultString = "Upload failed: " + err.message;
         this._result._completeTime = new Date().toISOString();
@@ -170,7 +171,7 @@ export default class TaskUpload extends CWMPTask {
    * Finalizes the upload task and queues the TransferComplete message.
    */
   finish() {
-    console.log(`Task [${this._type}] Complete:`, this._result);
+    this._device._log.debug(`Task [${this._type}] Complete:`, this._result);
     this._device.addMessage(() => {
       let faultStruct = xmlUtils.node("FaultStruct", {}, [
         xmlUtils.node("FaultCode", {}, this._result._faultCode),
