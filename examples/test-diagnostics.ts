@@ -2,7 +2,7 @@
  * Test script for TR-069 Download and Upload Diagnostics
  *
  * This script demonstrates how to trigger diagnostics on a simulated device.
- * Run with: npx tsx test/test-diagnostics.ts
+ * Run with: npx tsx examples/test-diagnostics.ts
  */
 
 import CWMPDevice from "../src/cwmp-device.ts";
@@ -88,3 +88,4 @@ async function main() {
 }
 
 main();
+

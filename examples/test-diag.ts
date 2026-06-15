@@ -8,7 +8,7 @@
  * This performs real network + child-process I/O, so it is a manual script (not a
  * `*.test.ts` unit test) and is excluded from `npm test`.
  *
- * Run with: npx tsx test/test-diag.ts
+ * Run with: npx tsx examples/test-diag.ts
  */
 
 import CWMPDevice from "../src/cwmp-device.ts";
@@ -78,3 +78,4 @@ async function main() {
 }
 
 main();
+
