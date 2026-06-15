@@ -1,8 +1,17 @@
 #!/usr/bin/env node
+import { buildOptions, printHelp } from "./src/config/index.ts";
 import CWMPSimulator from "./src/cwmp-sim.ts";
-import { buildOptions } from "./src/config.ts";
+// import { buildOptions } from "./src/config.ts";
 
-const options = buildOptions();
+const argv = process.argv.slice(2);
+
+if (argv.includes("--help") || argv.includes("-h")) {
+  console.log(printHelp());
+  process.exit(0);
+}
+
+const options = buildOptions(process.env, argv);
+
 const client = new CWMPSimulator(options);
 
 client.start();

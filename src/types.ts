@@ -24,12 +24,6 @@ export type CwmpNode = {
   // [paramName: string]: CwmpNode;
 };
 
-// export type CwmpAcsOptions = {
-//   url: string;
-//   user?: string;
-//   pass?: string;
-// };
-
 export type CwmpConnOptions = {
   ssl?: boolean;
   port?: number;
