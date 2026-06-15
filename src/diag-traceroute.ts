@@ -2,6 +2,7 @@
 import { exec } from "child_process";
 import CWMPTask from "./cwmp-task.ts";
 import CWMPDevice from "./cwmp-device.ts";
+import { tracerouteCommand, parseTracerouteHops } from "./diag-platform.ts";
 
 /**
  * Task implementation for TraceRoute Diagnostics.
@@ -78,52 +79,35 @@ export default class DiagTraceroute extends CWMPTask {
     const path = this._key;
     const hopPrefix = this._device._rootName === "Device" ? '' : 'Hop';
 
-    // 2. Execution (Windows tracert syntax)
-    // tracert -h <max_hops> -w <timeout> -d <host> (-d to verify no DNS resolution if not requested, but usually standard is fine)
-    // -d prevents reverse DNS lookup which speeds it up
-    const cmd = `tracert -h ${this._options._maxHopCount} -w ${this._options._timeout} -d ${this._options._host}`;
+    // 2. Execution (platform-aware: win32 / linux / darwin)
+    const cmd = tracerouteCommand({
+      host: this._options._host,
+      maxHopCount: this._options._maxHopCount,
+      timeout: this._options._timeout,
+    });
     this._device._log.debug(`Executing: ${cmd}`);
 
-    this._device.set(`${path}DiagnosticsState`, "Requested"); // While running
+    this._device.set(`${path}.DiagnosticsState`, "Requested"); // While running
 
     exec(cmd, (error, stdout, stderr) => {
       this._device._log.debug("Traceroute Output:\n", stdout);
 
       // 3. Parsing Results
-      const lines = stdout.split('\n');
       this._result._hopCount = 0;
       this._result._lastResponseTime = 0;
 
-      // Clear old hops
-      // Note: In a real efficient implementation we would clear only if size changed or overwrite
-      // Here we assume we just set the new ones.
+      for (const hop of parseTracerouteHops(stdout)) {
+        this._result._hopCount++;
+        const hopPath = `${path}.RouteHops.${hop.hop}`;
+        const errorCode = hop.times.every((t) => t === 0) ? '1' : '0';
+        // Update device model for this hop
+        this._device.set(`${hopPath}.${hopPrefix}Host`, hop.ip, true);
+        this._device.set(`${hopPath}.${hopPrefix}HostAddress`, hop.ip, true);
+        this._device.set(`${hopPath}.${hopPrefix}ErrorCode`, errorCode, true);
+        this._device.set(`${hopPath}.${hopPrefix}RTTimes`, hop.times.join(','), true);
 
-      const hopRegex = /^\s*(\d+)\s+((?:<1|\d+)\s*ms|\*)\s+((?:<1|\d+)\s*ms|\*)\s+((?:<1|\d+)\s*ms|\*)\s+(.+)$/;
-
-      lines.forEach(line => {
-        line = line.trim();
-        const match = line.match(hopRegex);
-        if (match) {
-          this._result._hopCount++;
-          const hopNum = parseInt(match[1]);
-          const hopPath = `${path}.RouteHops.${hopNum}`;
-          const rtt1 = match[2];
-          const rtt2 = match[3];
-          const rtt3 = match[4];
-          const hopIp = match[5].trim();
-          // Convert times to numbers, treat * as 0 or handle error
-          const parseRtt = (t) => (t === '*' ? 0 : (t === '<1' ? 0 : parseInt(t)));
-          const times = [parseRtt(rtt1), parseRtt(rtt2), parseRtt(rtt3)];
-          const errorCode = times.every((t: number) => (t === 0)) ? '1' : '0';
-          // Update device model for this hop
-          this._device.set(`${hopPath}.${hopPrefix}Host`, hopIp, true);
-          this._device.set(`${hopPath}.${hopPrefix}HostAddress`, hopIp, true); // Windows tracert -d gives IP
-          this._device.set(`${hopPath}.${hopPrefix}ErrorCode`, errorCode, true); // 1 for defined error? TR-069 doesn't specify simple ICMP error mapping clearly here, usually 0 is fine
-          this._device.set(`${hopPath}.${hopPrefix}RTTimes`, times.join(','), true);
-
-          this._result._lastResponseTime = Math.max(...times);
-        }
-      });
+        this._result._lastResponseTime = Math.max(...hop.times, this._result._lastResponseTime);
+      }
 
       this.finish();
     });

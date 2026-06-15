@@ -2,6 +2,7 @@
 import { exec } from "child_process";
 import CWMPTask from "./cwmp-task.ts";
 import CWMPDevice from "./cwmp-device.ts";
+import { pingCommand, parsePingOutput } from "./diag-platform.ts";
 
 /**
  * Task implementation for IP Ping Diagnostics.
@@ -91,43 +92,28 @@ export default class DiagPing extends CWMPTask {
 
     this._device._log.debug("Starting Ping Diagnostic...");
 
-    // 2. Execution (Windows ping syntax)
-    // ping -n <count> -w <timeout> -l <size> <host>
-    const cmd = `ping -n ${this._options._repetitions} -w ${this._options._timeout} -l ${this._options._dataBlockSize} ${this._options._host}`;
+    // 2. Execution (platform-aware: win32 / linux / darwin)
+    const cmd = pingCommand({
+      host: this._options._host,
+      repetitions: this._options._repetitions,
+      timeout: this._options._timeout,
+      dataBlockSize: this._options._dataBlockSize,
+    });
     this._device._log.debug(`Executing: ${cmd}`);
 
     exec(cmd, (error, stdout, stderr) => {
       // 3. Parsing Results
       this._device._log.debug("Ping Output:\n", stdout);
 
-      this._result._successCount = 0;
-      this._result._failureCount = 0;
-      this._result._minTime = 0;
-      this._result._maxTime = 0;
-      this._result._avgTime = 0;
-
-      const hostMatch = stdout.match(/\[(\d{1,3}(?:\.\d{1,3}){3})\]/);
-      if (hostMatch) {
-        this._result._host = hostMatch[1];
-      }
-
-      // Extract stats from Windows ping output
-      // Packets: Sent = 4, Received = 4, Lost = 0 (0% loss)
-      const packetMatch = stdout.match(/Sent = (\d+), Received = (\d+), Lost = (\d+)/);
-      if (packetMatch) {
-        this._result._successCount = parseInt(packetMatch[2]);
-        this._result._failureCount = parseInt(packetMatch[3]);
-      } else {
-        this._result._failureCount = this._options._repetitions;
-      }
-
-      // Minimum = 14ms, Maximum = 16ms, Average = 15ms
-      const timeMatch = stdout.match(/Minimum = (\d+)ms, Maximum = (\d+)ms, Average = (\d+)ms/);
-      if (timeMatch) {
-        this._result._minTime = parseInt(timeMatch[1]);
-        this._result._maxTime = parseInt(timeMatch[2]);
-        this._result._avgTime = parseInt(timeMatch[3]);
-      }
+      const parsed = parsePingOutput(stdout);
+      this._result._successCount = parsed.successCount;
+      // If nothing parsed (success and failure both 0), count all as failed.
+      this._result._failureCount =
+        parsed.failureCount || (parsed.successCount === 0 ? this._options._repetitions : 0);
+      this._result._minTime = parsed.minTime;
+      this._result._maxTime = parsed.maxTime;
+      this._result._avgTime = parsed.avgTime;
+      if (parsed.host) this._result._host = parsed.host;
 
       this._device._log.debug('Result:', this._result);
 
