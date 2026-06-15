@@ -45,14 +45,14 @@ Forward-looking enhancements (items that are *current gaps* live under Known lim
 - [ ] 14. **USP / TR-369 agent mode** — the CWMP successor. **(XL)**
 
 ### F. Developer experience & observability
-- [ ] 15. **SOAP wire-log / envelope dump** — flag to print every request/response (matches the README's debugging pitch). **(S)**
+- [x] 15. **SOAP wire-log / envelope dump** — delivered via the logging subsystem: SOAP envelopes log at `trace` (`--log-level trace`). See `roadmap/plans/enhancements/02-logging-subsystem.md`.
 - [ ] 16. **Web dashboard / REST control API** — start/stop devices, trigger informs, set params at runtime. **(L)**
 - [ ] 17. **Scriptable scenarios** — JSON/YAML script of "boot → wait → expect SPV → assert" (like AX INTEROP / CDRouter). **(L)**
 - [ ] 18. **Library/SDK API** — stable exports so others embed the simulator ("convert to a lib" goal). **(M)**
 
 ### G. Quality / packaging
 - [ ] 19. **Conformance checklist** — document which TR-069 Amendment 5 RPCs/behaviors are spec-conformant. **(S, docs)**
-- [ ] 20. **Cross-platform diagnostics** — `diag-ping.ts` uses Windows `ping` syntax; add Linux/macOS parsing so it works in CI/containers. **(S, also a latent bug)**
+- [x] 20. **Cross-platform diagnostics** — ping + traceroute now detect `process.platform` and use the right command + output parser for win32 and posix (linux/darwin), via the unit-tested `src/diag-platform.ts`. (Also fixed the `diag-traceroute` missing-dot `DiagnosticsState` bug.) See `roadmap/plans/enhancements/01-pre-fleet-enhancements-p2-cross-platform-diagnostics.md`.
 
 ## Status
 

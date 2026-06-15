@@ -171,6 +171,9 @@ Supported diagnostic areas include:
 - upload diagnostics
 - neighboring Wi-Fi diagnostics
 
+IP ping and traceroute shell out to the host's `ping`/`traceroute` (or `tracert`) and parse the
+output per platform — Windows, Linux, and macOS.
+
 When a diagnostic finishes, the simulator can trigger a new inform session with `8 DIAGNOSTICS COMPLETE`:
 
 ```mermaid
@@ -371,6 +374,7 @@ Configuration can be provided through environment variables (see `.env.example`)
 | `DEVICE_PRODUCT_CLASS` | Product class | `Simulator` |
 | `DEVICE_CSV` | CSV path used by the current placeholder export hook | `./models/data_model_test.csv` |
 | `DEVICE_JSON` | Optional JSON data-model fixture overlaid on the default tree (skipped if missing) | `./models/data_model_tests.json` |
+| `LOG_LEVEL` | Log verbosity: `silent`/`error`/`warn`/`info`/`debug`/`trace` | `info` |
 
 ### CLI options
 
@@ -384,6 +388,33 @@ Supported CLI flags:
 - `--ip <address>`
 - `--port <port>`
 - `--serial <serial>`
+- `--log-level <level>`
+
+## Logging
+
+`cwmp-sim` uses a small, dependency-free, level-based logger. Levels from least to most verbose:
+`silent` < `error` < `warn` < `info` < `debug` < `trace`.
+
+- **As a CLI**, logging defaults to `info` (lifecycle messages). Change it with `--log-level <level>`
+  or `LOG_LEVEL`. The raw SOAP envelopes exchanged with the ACS are logged at `trace`:
+
+  ```bash
+  npm run dev -- --log-level trace
+  ```
+
+- **As a library**, logging is **silent by default** (an import never prints). Configure it via
+  `options.log`:
+
+  ```ts
+  import { CWMPSimulator } from "cwmp-sim";
+
+  new CWMPSimulator({
+    device: { /* … */ }, acs: { /* … */ }, conn: { /* … */ },
+    log: { level: "debug" },           // built-in console logger at this level
+    // or bring your own logger:
+    // log: { logger: myPinoLogger },   // any { error, warn, info, debug, trace }
+  });
+  ```
 
 ## Project Structure
 
@@ -394,7 +425,8 @@ cwmp-sim/
 ├─ models/                 # Model fixtures
 ├─ src/
 │  ├─ index.ts             # Public library entry
-│  ├─ config.ts            # Env and CLI option builder
+│  ├─ config/              # Env + CLI option builder (fields, parser, help)
+│  ├─ logger.ts            # Level-based logger (silent default; CLI sets info)
 │  ├─ cwmp-sim.ts          # Main simulator orchestrator and session lifecycle
 │  ├─ cwmp-device.ts       # In-memory CPE data model, state, events, and task queue
 │  ├─ cwmp-conn.ts         # Connection Request HTTP server
