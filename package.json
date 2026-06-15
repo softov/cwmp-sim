@@ -3,8 +3,8 @@
   "version": "0.1.1",
   "description": "TypeScript CWMP/TR-069 CPE simulator for testing ACS sessions, SOAP RPCs, diagnostics, transfers, and Connection Requests.",
   "type": "module",
-  "main": "./dist/main.js",
-  "types": "./dist/main.d.ts",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
   "bin": {
     "cwmp-sim": "dist/main.js"
   },
@@ -59,5 +59,12 @@
     "@types/node": "^22.19.21",
     "tsx": "^4.22.4",
     "typescript": "^5.8.0"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js"
+    },
+    "./package.json": "./package.json"
   }
 }
