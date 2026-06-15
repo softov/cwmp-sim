@@ -291,6 +291,32 @@ npm install -g cwmp-sim
 cwmp-sim --acs http://your-acs:7547/ --serial SIM001
 ```
 
+
+### Use as a library
+
+```ts
+import { CWMPSimulator } from "cwmp-sim";
+
+const sim = new CWMPSimulator({
+  device: {
+    rootName: "InternetGatewayDevice",
+    serialNumber: "SIM001",
+  },
+  acs: {
+    url: "http://localhost:7547/acs",
+    user: "",
+    pass: "",
+  },
+  conn: {
+    addr: "0.0.0.0",
+    port: 7547,
+    user: "",
+    pass: "",
+  },
+});
+
+sim.start();
+```
 The npm CLI is configured via [CLI options](#cli-options) and/or [environment variables](#environment-variables)
 (`ACS_URL`, `ACS_USER`, `DEVICE_SERIAL`, …) exported in your shell. To load settings from a `.env`
 file instead, run the binary through Node's `--env-file`:
@@ -363,9 +389,12 @@ Supported CLI flags:
 
 ```text
 cwmp-sim/
-├─ main.ts                 # Entrypoint, env config, and CLI parsing
+├─ main.ts                 # Thin CLI dispatcher
+├─ examples/               # Manual scratch/smoke scripts
 ├─ models/                 # Model fixtures
 ├─ src/
+│  ├─ index.ts             # Public library entry
+│  ├─ config.ts            # Env and CLI option builder
 │  ├─ cwmp-sim.ts          # Main simulator orchestrator and session lifecycle
 │  ├─ cwmp-device.ts       # In-memory CPE data model, state, events, and task queue
 │  ├─ cwmp-conn.ts         # Connection Request HTTP server
@@ -383,8 +412,8 @@ cwmp-sim/
 │  ├─ task-upload.ts       # Upload RPC transfer task
 │  ├─ xml-parser.ts        # Lightweight XML parser
 │  ├─ xml-utils.ts         # XML node/fault helpers
-│  └─ types.d.ts           # Shared simulator types
-└─ test/                   # *.test.ts unit tests + legacy test-* scratch scripts
+│  └─ types.ts             # Shared simulator types
+└─ test/                   # *.test.ts unit tests
 ```
 
 ## Status
@@ -403,8 +432,9 @@ Unit tests use the built-in Node.js test runner (`node:test` / `node:assert`) an
 npm test
 ```
 
-The script targets `test/**/*.test.ts` only. The `test/test-*.{ts,js}` files are experimental/manual scratch scripts for diagnostics, IGD behavior, and Windows-oriented device information; they are intentionally excluded from `npm test` so they are not auto-executed.
+The script targets `test/**/*.test.ts` only. Manual scratch scripts for diagnostics, IGD behavior, and Windows-oriented device information live under `examples/` and are intentionally excluded from `npm test`.
 
 ## License
 
 BSD-3-Clause. See [LICENSE](LICENSE).
+
