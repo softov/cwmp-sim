@@ -2,7 +2,7 @@
 
 import xmlUtils from "./xml-utils.ts";
 import xmlParser from "./xml-parser.ts";
-import type { XmlNode } from "./types.d.ts";
+import type { XmlNode } from "./types.ts";
 
 const NAMESPACES = {
   "soap-enc": "http://schemas.xmlsoap.org/soap/encoding/",

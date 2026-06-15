@@ -7,7 +7,7 @@ import methods from "./cwmp-methods.ts";
 import soap from "./cwmp-soap.ts";
 import xmlParser from "./xml-parser.ts";
 import CwmpHttp from "./cwmp-http.ts";
-import type { CwmpSimulatorOptions } from './types.d.ts';
+import type { CwmpSimulatorOptions } from './types.ts';
 import models from "./cwmp-model.ts";
 /**
  * Orchestrates the simulated CPE.

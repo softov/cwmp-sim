@@ -2,7 +2,7 @@
 
 import models from "./cwmp-model.ts";
 import fs from "node:fs/promises";
-import type { CwmpNode, CwmpDeviceOptions } from './types.d.ts';
+import type { CwmpNode, CwmpDeviceOptions } from './types.ts';
 import DiagPing from "./diag-ping.ts";
 import DiagTraceroute from "./diag-traceroute.ts";
 import DiagDownload from "./diag-download.ts";

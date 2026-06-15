@@ -1,6 +1,6 @@
 "use strict";
 
-import type { XmlNode } from "./types.d.ts";
+import type { XmlNode } from "./types.ts";
 
 const CHAR_SINGLE_QUOTE = 39;
 const CHAR_DOUBLE_QUOTE = 34;
