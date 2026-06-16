@@ -11,6 +11,10 @@ import DiagWifi from "./diag-wifi.ts";
 import CWMPTask from "./cwmp-task.ts";
 import { NULL_LOGGER, type Logger } from "./logger.ts";
 import CwmpParams from "./cwmp-params.ts";
+import CwmpHttp from "./cwmp-http.ts";
+import methods from "./cwmp-methods.ts";
+import soap from "./cwmp-soap.ts";
+import xmlParser from "./xml-parser.ts";
 
 function inferXsdType(value: any): string {
   if (typeof value === "boolean") return "xsd:boolean";
@@ -90,6 +94,12 @@ export default class CWMPDevice {
     targetFileName?: string;
   }> = [];
   _scheduledInform: { commandKey: string; time: string } | null = null;
+  // CWMP session (outbound to the ACS) — created lazily in start()
+  _httpClient: CwmpHttp | null = null;
+  _requestId: string | null = null;
+  _periodicInformTimeout: any = null;
+  _periodicInformInterval = 30000;
+  _periodicInformDisabled = false;
   _diag: {
     ping: DiagPing;
     traceroute: DiagTraceroute;
@@ -237,6 +247,166 @@ export default class CWMPDevice {
       user: this.getValue(`${ms}.ConnectionRequestUsername`),
       pass: this.getValue(`${ms}.ConnectionRequestPassword`)
     };
+  }
+
+  // --- CWMP session (outbound: the CPE talks to the ACS) ---
+
+  /**
+   * Starts the device's CWMP activity: lazily builds the ACS HTTP client from
+   * the device's own ManagementServer params and sends the initial inform.
+   * @param {string} event - The boot event (default "1 BOOT").
+   */
+  start(event: string = "1 BOOT") {
+    if (!this._httpClient) {
+      const ms = `${this._rootName}.ManagementServer`;
+      this._httpClient = new CwmpHttp({
+        method: "POST",
+        uri: this.getValue(`${ms}.URL`),
+        username: this.getValue(`${ms}.Username`),
+        password: this.getValue(`${ms}.Password`),
+        logger: this._log,
+      });
+      // A completed diagnostic/transfer schedules a follow-up inform.
+      this.addListener("sessionInform", (val: string) => {
+        this.setPeriodicInform(val, 1000);
+        this._periodicInformDisabled = true;
+      });
+    }
+    this.startSession(event);
+  }
+
+  /**
+   * Triggered by the Connection Request server when the ACS pokes this device.
+   * @param {string} event - Event code (default "6 CONNECTION REQUEST").
+   */
+  onConnectionRequest(event: string = "6 CONNECTION REQUEST") {
+    this.startSession(event);
+  }
+
+  /**
+   * Stops the device: clears the periodic-inform timer and tears down the client.
+   */
+  stop() {
+    if (this._periodicInformTimeout) clearTimeout(this._periodicInformTimeout);
+    this._periodicInformTimeout = null;
+    if (this._httpClient) {
+      this._httpClient.finish();
+      this._httpClient = null;
+    }
+  }
+
+  /**
+   * Initiates a CWMP session with the ACS.
+   * @param {string} event - The event code (e.g., "1 BOOT", "2 PERIODIC").
+   */
+  async startSession(event: string = "2 PERIODIC") {
+    this._requestId = Math.random().toString(36).slice(-8);
+    this._periodicInformDisabled = false;
+    const sn = this.getValue(`${this._rootName}.DeviceInfo.SerialNumber`);
+    this._log.info(`[${sn}] Starting session with event: ${event}`);
+
+    try {
+      let body = methods.Inform(this, event);
+      let xml = soap.createSoapDocument(this._requestId, body);
+      let responseXml = await this.sendRequest(xml);
+      await this.handleMethod(responseXml);
+    } catch (e) {
+      this._log.error("Session internal failure: ", e);
+    }
+  }
+
+  /**
+   * Schedules the next periodic inform.
+   * @param {string} event - Event code.
+   * @param {number} interval - Interval in ms (default: this._periodicInformInterval).
+   */
+  setPeriodicInform(event: string = "2 PERIODIC", interval: number = 0) {
+    if (this._periodicInformDisabled) return;
+    if (this._periodicInformTimeout) clearTimeout(this._periodicInformTimeout);
+
+    let periodicInformInterval = interval || this._periodicInformInterval;
+    if (!periodicInformInterval || periodicInformInterval < 0) periodicInformInterval = 3000;
+
+    this._periodicInformTimeout = setTimeout(this.startSession.bind(this, event), periodicInformInterval);
+  }
+
+  /**
+   * Sends a SOAP request to the ACS and handles reboot / factory-reset / end-of-session.
+   * @param {string} xml - The SOAP XML body.
+   */
+  async sendRequest(xml: string): Promise<null | string> {
+    this._log.trace("→ ACS\n" + xml);
+    const body = await this._httpClient.sendRequest(xml);
+    this._log.trace("← ACS\n" + (body && body.length ? body : "(empty / 204)"));
+
+    if (this._pendingReboot) {
+      this._log.info("Rebooting in 5 seconds...");
+      setTimeout(() => {
+        this._pendingReboot = false;
+        this._log.info("Device rebooted.");
+        this.startSession("1 BOOT,M Reboot");
+      }, 5000);
+      return null;
+    }
+
+    if (this._pendingFactoryReset) {
+      this._log.info("Factory Resetting in 5 seconds...");
+      setTimeout(() => {
+        this._pendingFactoryReset = false;
+        this._log.info("Device Reset.");
+        this.startSession("1 BOOT");
+      }, 5000);
+      return null;
+    }
+
+    if (!body) {
+      this.setPeriodicInform();
+      return null;
+    }
+
+    return body;
+  }
+
+  /**
+   * Handles an ACS response: dispatches the RPC and continues the session loop.
+   * @param {string} body - The response body string.
+   */
+  async handleMethod(body: string): Promise<null> {
+    if (!body) {
+      this._log.debug("Empty response from ACS (End of Session)");
+      this.setPeriodicInform();
+      return null;
+    }
+    let xmlObj = body ? xmlParser.parseXml(body) : null;
+    let [rId, bodyElement] = soap.getRequestIdAndBody(xmlObj);
+    this._requestId = rId; // Update ID for response
+
+    let requestElement = bodyElement.children[0];
+    let requestXml: string = "";
+    let responseXml: null | string = null;
+
+    if (!requestElement) {
+      this._log.debug("No recognizable element in Body.");
+      responseXml = await this.sendRequest("");
+      await this.handleMethod(responseXml);
+      return null;
+    }
+
+    let methodName = requestElement.localName;
+    const method = methods[methodName];
+    this._log.info(`Received: ${methodName}`);
+
+    if (!method) {
+      this._log.warn(`Method ${methodName} not supported.`);
+      requestXml = soap.createFaultResponse(this._requestId, 9000, "Method not supported.");
+      responseXml = await this.sendRequest(requestXml);
+      return this.handleMethod(responseXml);
+    }
+    let responseBody = method(this, requestElement);
+    requestXml = soap.createSoapDocument(this._requestId, responseBody);
+    responseXml = await this.sendRequest(requestXml);
+    await this.handleMethod(responseXml);
+    return;
   }
 
   /**

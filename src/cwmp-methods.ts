@@ -2,7 +2,7 @@
 
 import xmlUtils from "./xml-utils.ts";
 import xmlParser from "./xml-parser.ts";
-import CWMPDevice from "./cwmp-device.ts";
+import type CWMPDevice from "./cwmp-device.ts";
 import type { XmlNode } from "./types.ts";
 import TaskDownload from "./task-download.ts";
 import TaskUpload from "./task-upload.ts";
