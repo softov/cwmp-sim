@@ -201,5 +201,22 @@ export const configFields: ConfigField<unknown>[] = [
     label: "Log level (silent|error|warn|info|debug|trace)",
     default: "info",
     parse: asLogLevel
+  },
+
+  {
+    path: "fleet.count",
+    env: "FLEET_COUNT",
+    flag: "--count",
+    label: "Number of devices to simulate",
+    default: 1,
+    parse: asInt
+  },
+  {
+    path: "fleet.bootDelay",
+    env: "FLEET_BOOT_DELAY",
+    flag: "--boot-delay",
+    label: "Delay (ms) between device boots",
+    default: 1000,
+    parse: asInt
   }
 ] satisfies ConfigField<unknown>[];

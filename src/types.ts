@@ -64,10 +64,18 @@ export type CwmpLogOptions = {
   sink?: LoggerSink;
 };
 
+export type CwmpFleetOptions = {
+  /** Number of devices to simulate (default 1). */
+  count?: number;
+  /** Delay in ms between each device's boot, to stagger Informs (default 1000). */
+  bootDelay?: number;
+};
+
 export type CwmpSimulatorOptions = {
   device: CwmpDeviceOptions;
   conn: CwmpConnOptions;
   acs: CwmpAcsOptions;
   log?: CwmpLogOptions;
+  fleet?: CwmpFleetOptions;
 };
 

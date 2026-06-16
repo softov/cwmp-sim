@@ -141,3 +141,14 @@ test("setConnectionRequestURL updates the CR URL leaf", () => {
   d.setConnectionRequestURL("http://host:7547/abc123");
   assert.equal(d.getValue(`${MS}.ConnectionRequestURL`), "http://host:7547/abc123");
 });
+
+test("device resolves {i} identity templates from its own index", () => {
+  const d = new CWMPDevice({ rootName: "Device", serialNumber: "SIM-{i}", oui: "00E0{i:02x}", index: 5 });
+  assert.equal(d.getValue("Device.DeviceInfo.SerialNumber"), "SIM-5");
+  assert.equal(d.getValue("Device.DeviceInfo.ManufacturerOUI"), "00E005");
+});
+
+test("device defaults index to 0 when not provided", () => {
+  const d = new CWMPDevice({ rootName: "Device", serialNumber: "dev-{i:03}" });
+  assert.equal(d.getValue("Device.DeviceInfo.SerialNumber"), "dev-000");
+});

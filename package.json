@@ -15,7 +15,7 @@
   ],
   "scripts": {
     "dev": "node --import tsx --env-file=.env ./main.ts",
-    "build": "tsc",
+    "build": "tsc -p tsconfig.build.json",
     "start": "node --env-file=.env ./dist/main.js",
     "check": "tsc --noEmit",
     "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\"",

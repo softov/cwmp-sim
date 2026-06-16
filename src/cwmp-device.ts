@@ -15,6 +15,7 @@ import CwmpHttp from "./cwmp-http.ts";
 import methods from "./cwmp-methods.ts";
 import soap from "./cwmp-soap.ts";
 import xmlParser from "./xml-parser.ts";
+import { applyTemplate } from "./config/template.ts";
 
 function inferXsdType(value: any): string {
   if (typeof value === "boolean") return "xsd:boolean";
@@ -118,13 +119,16 @@ export default class CWMPDevice {
     if (options.csvPath != undefined) this._csvPath = options.csvPath;
     if (options.jsonPath != undefined) this._jsonPath = options.jsonPath;
     if (options.logger) this._log = options.logger;
-    if (options.mac) this._mac = options.mac;
+
+    // Resolve {i} identity templates against this device's own index.
+    const idx = options.index ?? 0;
+    if (options.mac) this._mac = applyTemplate(options.mac, idx);
 
     this._manufacturer = options.manufacturer || "BrByte";
     this._rootName = options.rootName || "Device"; // Default to TR-098 as per user hint
-    this._oui = options.oui || "FFFFFF";
+    this._oui = applyTemplate(options.oui || "FFFFFF", idx);
     this._productClass = options.productClass || "Simulator";
-    this._serialNumber = options.serialNumber || "123456";
+    this._serialNumber = applyTemplate(options.serialNumber || "123456", idx);
 
     // Determine structures based on Root Type
     // Determine structures based on Root Type

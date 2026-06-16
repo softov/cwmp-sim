@@ -159,8 +159,8 @@ const wlanConfigurationZteParams = merge(wlanConfigurationParams, {
  * @param {object} modelDef 
  * @returns {object} Internal structure { Property: { _value, _type, _writable } }
  */
-function toInternalModel(modelDef) {
-  const internal = {};
+function toInternalModel(modelDef): Record<string, any> {
+  const internal: Record<string, any> = {};
   for (const key in modelDef) {
     const item = modelDef[key];
     // Pass through if already internal format (e.g. containers like PortMapping)

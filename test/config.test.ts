@@ -23,15 +23,15 @@ test("buildOptions rejects an invalid log level", () => {
   assert.throws(() => buildOptions({}, ["--log-level", "loud"]), /Invalid log level/);
 });
 
-test("buildOptions resolves identity templates with device.index", () => {
+test("buildOptions keeps identity templates raw (resolved per-device at construction)", () => {
   const o = buildOptions({}, ["--serial", "SIM-{i}", "--mac", "AA:{i:02}", "--index", "7"]);
-  assert.equal(o.device.serialNumber, "SIM-7");
-  assert.equal(o.device.mac, "AA:07");
+  assert.equal(o.device.serialNumber, "SIM-{i}"); // raw — the device stamps its index
+  assert.equal(o.device.mac, "AA:{i:02}");
   assert.equal(o.device.index, 7);
 });
 
-test("buildOptions defaults device.index to 0 (templates resolve without --index)", () => {
-  const o = buildOptions({}, ["--serial", "dev-{i:03}"]);
-  assert.equal(o.device.index, 0);
-  assert.equal(o.device.serialNumber, "dev-000");
+test("buildOptions parses fleet count and boot delay", () => {
+  assert.equal(buildOptions({}, []).fleet?.count, 1);
+  assert.equal(buildOptions({}, ["--count", "5"]).fleet?.count, 5);
+  assert.equal(buildOptions({ FLEET_BOOT_DELAY: "250" }, []).fleet?.bootDelay, 250);
 });
