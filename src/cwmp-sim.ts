@@ -7,18 +7,25 @@ import type { CwmpSimulatorOptions } from "./types.ts";
 import { createLogger, NULL_LOGGER, type Logger } from "./logger.ts";
 
 /**
- * Orchestrates a simulated CPE: owns the device and the Connection Request
- * server, and routes incoming connection requests to the device's session.
- * The device itself runs the CWMP session (Inform loop) with the ACS.
+ * Orchestrates a fleet of simulated CPEs: builds N self-running devices and
+ * fronts them with a single shared Connection Request server that routes by URL
+ * path (`/{hash}`). Each device runs its own CWMP session with the ACS.
+ * A single-device run is simply a fleet of one.
  */
 export default class CWMPSimulator {
-  _device!: CWMPDevice;
+  _devices: CWMPDevice[] = [];
   _connectRequestServer: CWMPConn | null = null;
   _options: CwmpSimulatorOptions;
   _log: Logger = NULL_LOGGER;
 
+  /** Back-compat accessor: the first device (single-device callers / CLI SIGINT). */
+  get _device(): CWMPDevice {
+    return this._devices[0];
+  }
+
   /**
-   * Creates a new Simulator instance.
+   * Creates a fleet of `fleet.count` devices (default 1), each with an
+   * index-derived identity, configured against the ACS.
    * @param {object} options - Configuration options.
    */
   constructor(options: CwmpSimulatorOptions) {
@@ -29,52 +36,61 @@ export default class CWMPSimulator {
     this._log = options.log?.logger
       ?? createLogger({ level: options.log?.level, prefix: options.log?.prefix, sink: options.log?.sink });
 
-    this._device = new CWMPDevice({ ...options.device, logger: this._log });
-    this._device.configureManagementServer({
-      acsUrl: options.acs.url,
-      acsUser: options.acs.user,
-      acsPass: options.acs.pass,
-      crUser: options.conn.user,
-      crPass: options.conn.pass,
-    });
+    const count = Math.max(1, options.fleet?.count ?? 1);
+    const baseIndex = options.device.index ?? 0;
 
-    // Keep the CR server's credentials aligned if the ACS rewrites them via SPV.
-    const r = this._device._rootName;
-    this._device.addListener(`${r}.ManagementServer.ConnectionRequestUsername`, (val) => {
-      this._log.debug(`ConnectionRequestUsername changed to [${val}]`);
-      this._options.conn.user = val;
-    });
-    this._device.addListener(`${r}.ManagementServer.ConnectionRequestPassword`, (val) => {
-      this._log.debug(`ConnectionRequestPassword changed to [${val}]`);
-      this._options.conn.pass = val;
-    });
+    for (let i = 0; i < count; i++) {
+      const device = new CWMPDevice({ ...options.device, index: baseIndex + i, logger: this._log });
+      device.configureManagementServer({
+        acsUrl: options.acs.url,
+        acsUser: options.acs.user,
+        acsPass: options.acs.pass,
+        crUser: options.conn.user,
+        crPass: options.conn.pass,
+      });
+      this._devices.push(device);
+    }
   }
 
   /**
-   * Starts the Connection Request server, then boots the device's CWMP session.
+   * Starts the shared Connection Request server, then registers and boots each
+   * device (staggered by `fleet.bootDelay`). Each device's CR URL is
+   * `http://addr:port/{hash}` where hash is derived from its serial.
    */
   start() {
+    const delay = this._options.fleet?.bootDelay ?? 1000;
+
+    // Already listening — just (re)boot the devices.
     if (this._connectRequestServer) {
-      this._device.start();
+      this._devices.forEach((device, i) => setTimeout(() => device.start(), i * delay));
       return this._connectRequestServer;
     }
-    this._connectRequestServer = new CWMPConn(this._options.acs.url, this._options.conn, this._log);
-    this._connectRequestServer.listenHTTP((event: string) => {
-      this._device.onConnectionRequest(event);
-    }).then((connection: ConnectionRequest) => {
-      this._device.setConnectionRequestURL(connection.url);
-      this._log.info(`Connection server started on ${connection.url}`);
-      this._device.start();
+
+    const server = new CWMPConn(this._options.acs.url, this._options.conn, this._log);
+    this._connectRequestServer = server;
+
+    server.listenHTTP().then((connection: ConnectionRequest) => {
+      this._devices.forEach((device, i) => {
+        const hash = device.getConnectionHash();
+        server.register(hash, {
+          credentials: () => device.getCrCredentials(),
+          onRequest: () => device.onConnectionRequest(),
+        });
+        device.setConnectionRequestURL(`${connection.url}${hash}`);
+        setTimeout(() => device.start(), i * delay);
+      });
     }).catch((err: Error) => {
       this._log.error(`Failed to start connection server: ${err.message}`);
     });
+
+    return server;
   }
 
   /**
-   * Stops the device session and closes the Connection Request server.
+   * Stops every device session and closes the Connection Request server.
    */
   stop() {
-    this._device.stop();
+    for (const device of this._devices) device.stop();
     if (this._connectRequestServer?._server) {
       this._connectRequestServer._server.close();
     }

@@ -16,6 +16,15 @@ import methods from "./cwmp-methods.ts";
 import soap from "./cwmp-soap.ts";
 import xmlParser from "./xml-parser.ts";
 import { applyTemplate } from "./config/template.ts";
+import * as crypto from "node:crypto";
+
+/**
+ * Derives a device's Connection Request URL path segment from its serial.
+ * Exported so the scheme can be verified independently.
+ */
+export function hashConnectionPath(serial: string): string {
+  return crypto.createHash("md5").update(serial).digest("hex").slice(0, 8);
+}
 
 function inferXsdType(value: any): string {
   if (typeof value === "boolean") return "xsd:boolean";
@@ -67,6 +76,7 @@ export default class CWMPDevice {
   _jsonPath: string | null = null;
   _log: Logger = NULL_LOGGER;
   _mac: string = "";
+  _connHash: string | null = null;
   _rootName: string = "Device";
   _rootTree: any;
   _params!: CwmpParams;
@@ -251,6 +261,15 @@ export default class CWMPDevice {
       user: this.getValue(`${ms}.ConnectionRequestUsername`),
       pass: this.getValue(`${ms}.ConnectionRequestPassword`)
     };
+  }
+
+  /**
+   * The device's Connection Request URL path segment (a hash of its serial).
+   * Cached after first use — the serial is fixed once the device is built.
+   * @returns {string}
+   */
+  getConnectionHash(): string {
+    return (this._connHash ??= hashConnectionPath(this._serialNumber));
   }
 
   // --- CWMP session (outbound: the CPE talks to the ACS) ---

@@ -18,6 +18,18 @@ export type ConnectionRequest = {
   url: string;
 }
 
+/**
+ * What a registered Connection Request path resolves to. The server is
+ * device-agnostic: it asks the route for current credentials and notifies it on
+ * an authenticated request — it never imports or inspects a device.
+ */
+export type CrRoute = {
+  /** Current CR credentials (empty user/pass ⇒ no auth required). */
+  credentials(): { user: string; pass: string };
+  /** Invoked on an authenticated connection request. */
+  onRequest(): void;
+};
+
 type HttpTransport = {
   createServer: typeof http.createServer;
   request: typeof http.request;
@@ -25,8 +37,9 @@ type HttpTransport = {
 };
 
 /**
- * Handles incoming connection requests (CPE Server).
- * Supports Basic and Digest authentication.
+ * Shared Connection Request server (CPE side). Routes incoming requests by URL
+ * path (`http://addr:port/{hash}`) to a registered device and authenticates with
+ * that device's own Connection Request credentials. Supports Basic and Digest.
  */
 export default class CWMPConn {
   _transport: HttpTransport = null;
@@ -35,14 +48,14 @@ export default class CWMPConn {
   _server: http.Server | https.Server = null;
   _logVerbose = true;
   _log: Logger = NULL_LOGGER;
-  _onRequest: (event: string) => void = null;
-  _onListening: () => void = null;
-  _requestOptions: any = null;
+  /** hash path → route */
+  _routes: Map<string, CrRoute> = new Map();
 
   /**
-   * Creates a new connection request handler.
-   * @param {string} acsUrl - The URL to detect IP (DAMMM!!!)
-   * @param {object} options - Configuration options.
+   * Creates a new connection request server.
+   * @param {string} acsUrl - Used to detect the local egress IP to advertise.
+   * @param {object} options - Connection options (bind addr/port, authMode).
+   * @param {Logger} logger
    */
   constructor(acsUrl: string, options: CwmpConnOptions, logger: Logger = NULL_LOGGER) {
     this._log = logger;
@@ -50,23 +63,18 @@ export default class CWMPConn {
       authMode: 'Digest',
       addr: '0.0.0.0',
       port: 7547,
+      ssl: false,
       ...options,
     };
 
     const parsedUrl = new URL(acsUrl);
     this._netConfig = {
-      // protocol: parsedUrl.protocol,
       host: parsedUrl.hostname,
       port: parseInt(parsedUrl.port),
       family: 4,
-      // path: parsedUrl.pathname,
-      // path: parsedUrl.pathname + parsedUrl.search,
-      // href: parsedUrl.href
     };
 
     this._server = null;
-    this._onRequest = () => { };
-    this._onListening = () => { };
     this._transport = this._options.ssl ? https : http;
   }
 
@@ -83,51 +91,62 @@ export default class CWMPConn {
   }
 
   /**
-   * Starts the HTTP server for connection requests.
-   * @param {Function} callback - Called when a valid connection request is received.
-   * @returns {http.Server} The Node.js HTTP server instance.
+   * Registers a route under its CR URL hash path.
+   * @param {string} hash - The path segment (e.g. device.getConnectionHash()).
+   * @param {CrRoute} route - Credentials provider + request callback.
    */
-  async listenHTTP(callback: (event: string) => void): Promise<ConnectionRequest> {
-    this._onRequest = callback;
+  register(hash: string, route: CrRoute) {
+    if (this._routes.has(hash)) {
+      this._log.warn(`Connection Request path collision for hash '${hash}' — overwriting`);
+    }
+    this._routes.set(hash, route);
+  }
 
+  /** Removes a route from the routing table. */
+  unregister(hash: string) {
+    this._routes.delete(hash);
+  }
+
+  /**
+   * Starts the HTTP server for connection requests. Routes by URL path to a
+   * registered device. Resolves with the advertised base URL.
+   * @returns {Promise<ConnectionRequest>}
+   */
+  async listenHTTP(): Promise<ConnectionRequest> {
     return new Promise((resolve, reject) => {
       let listenPort: number = this._options.port;
       let listenAddr = this._options.addr;
-      // Start a dummy socket to get the used local ip
+      // Start a dummy socket to discover the local egress IP to advertise.
       let socket = net.createConnection(this._netConfig)
         .on("error", reject)
         .on("connect", () => {
-          this._log.debug('connect address');
+          // Use the discovered local egress address for the advertised URL, but
+          // keep binding on the configured CR port (shared by the whole fleet).
           const address = socket.address();
-          if (typeof address === 'object' && address !== null) {
-            if ('address' in address) listenAddr = address.address;
-            if ('port' in address) listenPort = (address.port as number) - 1;
+          if (typeof address === 'object' && address !== null && 'address' in address) {
+            listenAddr = address.address;
           }
           socket.end();
         })
         .on("close", () => {
 
           this._server = this._transport.createServer((req: http.IncomingMessage, res: http.ServerResponse) => {
-            if (req.url !== '/') {
+            const path = (req.url || "/").replace(/^\/+/, "").replace(/\/+$/, "");
+            const route = this._routes.get(path);
+            if (!route) {
               res.writeHead(404);
               res.end();
               return;
             }
-            if (this._logVerbose) this._log.debug(`Simulator ${listenAddr}:${listenPort} got connection request`);
-            this.emit('requested');
-            this.handleRequest(req, res);
+            if (this._logVerbose) this._log.debug(`Connection request for /${path}`);
+            this.handleRequest(req, res, route);
+          });
 
-          }).listen(listenPort, listenAddr, () => {
-            // if (err) throw err;
-            // const theAddr = this._server.address();
-            // listenAddr = typeof theAddr === 'object' && theAddr !== null ? theAddr.address : listenAddr;
-            // listenPort = typeof theAddr === 'object' && theAddr !== null ? theAddr.port : listenPort;
+          this._server.on("error", reject); // e.g. EADDRINUSE → reject instead of crashing
+
+          this._server.listen(listenPort, listenAddr, () => {
             const newUrl = `${this._options.ssl ? 'https' : 'http'}://${listenAddr}:${listenPort}/`;
-            if (this._logVerbose) {
-              this._log.info(`Simulator ${listenAddr}:${listenPort} Connection Request Server listening on ${newUrl}`);
-              this._log.debug(`Simulator`, this._server.address());
-            }
-            this.emit('listening');
+            this._log.info(`Connection Request Server listening on ${newUrl}`);
             resolve({
               ssl: this._options.ssl,
               addr: listenAddr,
@@ -139,17 +158,17 @@ export default class CWMPConn {
     });
   }
 
-  emit(event: string) {
-    // do nothing
-  }
   /**
-   * Internal handler for incoming HTTP requests.
-   * Performs authentication checks and triggers the callback.
-   * @param {http.IncomingMessage} req 
-   * @param {http.ServerResponse} res 
+   * Authenticates an incoming request against the route's credentials, then
+   * notifies the route.
+   * @param {http.IncomingMessage} req
+   * @param {http.ServerResponse} res
+   * @param {CrRoute} route - The routed target.
    */
-  handleRequest(req: http.IncomingMessage, res: http.ServerResponse) {
-    if (this._options.user && this._options.pass) {
+  handleRequest(req: http.IncomingMessage, res: http.ServerResponse, route: CrRoute) {
+    const { user, pass } = route.credentials();
+
+    if (user && pass) {
       const auth = req.headers['authorization'];
 
       if (!auth) {
@@ -161,12 +180,7 @@ export default class CWMPConn {
       const scheme = parts[0];
 
       if (this._options.authMode === "Digest") {
-        if (scheme !== "Digest") {
-          this.sendChallenge(res);
-          return;
-        }
-
-        if (!this.validateDigest(req, auth.substring(7))) {
+        if (scheme !== "Digest" || !this.validateDigest(req, auth.substring(7), user, pass)) {
           this.sendChallenge(res);
           return;
         }
@@ -176,9 +190,8 @@ export default class CWMPConn {
           this.sendChallenge(res);
           return;
         }
-
         const credentials = Buffer.from(parts[1], 'base64').toString().split(':');
-        if (credentials[0] !== this._options.user || credentials[1] !== this._options.pass) {
+        if (credentials[0] !== user || credentials[1] !== pass) {
           this.sendChallenge(res);
           return;
         }
@@ -189,18 +202,12 @@ export default class CWMPConn {
     res.writeHead(200);
     res.end();
 
-    // if (this.onGoingSession) {
-    //   this.pendingAcsRequest = true;
-    // }
-
-    if (this._onRequest) {
-      this._onRequest("6 CONNECTION REQUEST");
-    }
+    route.onRequest();
   }
 
   /**
    * Sends a 401 Challenge (Basic or Digest).
-   * @param {http.ServerResponse} res 
+   * @param {http.ServerResponse} res
    */
   sendChallenge(res: http.ServerResponse) {
     if (this._options.authMode === "Digest") {
@@ -216,12 +223,14 @@ export default class CWMPConn {
   }
 
   /**
-   * Validates a Digest Authorization header.
-   * @param {http.IncomingMessage} req 
-   * @param {string} authHeaderStr 
+   * Validates a Digest Authorization header against the given credentials.
+   * @param {http.IncomingMessage} req
+   * @param {string} authHeaderStr
+   * @param {string} user
+   * @param {string} pass
    * @returns {boolean} True if valid.
    */
-  validateDigest(req: http.IncomingMessage, authHeaderStr: string): boolean {
+  validateDigest(req: http.IncomingMessage, authHeaderStr: string, user: string, pass: string): boolean {
     const params: any = {};
     const regex = /(\w+)=(?:"([^"]+)"|([^\s,]+))/g;
     let match: RegExpExecArray | null;
@@ -229,9 +238,9 @@ export default class CWMPConn {
       params[match[1]] = match[2] || match[3];
     }
 
-    if (params.username !== this._options.user) return false;
+    if (params.username !== user) return false;
 
-    const ha1 = md5(`${this._options.user}:${params.realm}:${this._options.pass}`);
+    const ha1 = md5(`${user}:${params.realm}:${pass}`);
     const ha2 = md5(`${req.method}:${params.uri}`);
     const validResponse = md5(`${ha1}:${params.nonce}:${params.nc}:${params.cnonce}:${params.qop}:${ha2}`);
 

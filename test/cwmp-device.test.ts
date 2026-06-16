@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import CWMPDevice from "../src/cwmp-device.ts";
+import CWMPDevice, { hashConnectionPath } from "../src/cwmp-device.ts";
 
 // TR-098 root keeps the paths short and the fixtures deterministic.
 // No jsonPath is passed, so the constructor performs no file I/O.
@@ -151,4 +151,16 @@ test("device resolves {i} identity templates from its own index", () => {
 test("device defaults index to 0 when not provided", () => {
   const d = new CWMPDevice({ rootName: "Device", serialNumber: "dev-{i:03}" });
   assert.equal(d.getValue("Device.DeviceInfo.SerialNumber"), "dev-000");
+});
+
+test("hashConnectionPath is deterministic, 8 hex chars, serial-distinct", () => {
+  assert.equal(hashConnectionPath("SIM-1"), hashConnectionPath("SIM-1"));
+  assert.match(hashConnectionPath("SIM-1"), /^[0-9a-f]{8}$/);
+  assert.notEqual(hashConnectionPath("SIM-1"), hashConnectionPath("SIM-2"));
+});
+
+test("getConnectionHash matches the serial's hash and is cached", () => {
+  const d = new CWMPDevice({ rootName: "Device", serialNumber: "SIM-{i}", index: 9 });
+  assert.equal(d.getConnectionHash(), hashConnectionPath("SIM-9"));
+  assert.equal(d.getConnectionHash(), d.getConnectionHash()); // stable / cached
 });
