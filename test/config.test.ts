@@ -42,6 +42,12 @@ test("buildOptions always emits at least one fleet group", () => {
   assert.equal(o.fleet?.groups?.[0].count, 1);
 });
 
+test("buildOptions parses the storage dir: flag > env > default", () => {
+  assert.equal(buildOptions({}, ["--storage-dir", "/a"]).storageDir, "/a");
+  assert.equal(buildOptions({ STORAGE_DIR: "/b" }, []).storageDir, "/b");
+  assert.equal(buildOptions({}, []).storageDir, "~/.cwmp-sim/devices");
+});
+
 test("grouped flags bind group-scoped flags to their --model; globals stay global", () => {
   const o = buildOptions({}, [
     "--port", "9000",

@@ -226,5 +226,13 @@ export const configFields: ConfigField<unknown>[] = [
     label: "Directory to resolve model names from",
     default: "./models",
     parse: asString
+  },
+  {
+    path: "storageDir",
+    env: "STORAGE_DIR",
+    flag: "--storage-dir",
+    label: "Directory for per-device state files (<serial>.json)",
+    default: "~/.cwmp-sim/devices",
+    parse: asString
   }
 ] satisfies ConfigField<unknown>[];

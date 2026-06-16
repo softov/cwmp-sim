@@ -65,9 +65,7 @@ export type CwmpDeviceOptions = {
   mac?: string;
   index?: number;
   logger?: Logger;
-  /** Name or path of a model to load (resolved by the config layer; `.csv`/`.json` path or a bare name under `modelsDir`). */
-  modelName?: string;
-  /** A pre-loaded device model (base parameter tree); set by the config layer. */
+  /** A pre-loaded device model (base parameter tree). Resolved objects only — the library reads no files. */
   model?: LoadedModel;
 };
 
@@ -101,8 +99,6 @@ export type CwmpFleetOptions = {
   count?: number;
   /** Delay in ms between each device's boot, to stagger Informs (default 1000). */
   bootDelay?: number;
-  /** Directory to resolve model names from (default `./models`). */
-  modelsDir?: string;
   /** Fleet composition: one entry per device group (mixed types). When set, supersedes `count`. */
   groups?: FleetGroup[];
 };
@@ -113,5 +109,11 @@ export type CwmpSimulatorOptions = {
   acs: CwmpAcsOptions;
   log?: CwmpLogOptions;
   fleet?: CwmpFleetOptions;
+  /**
+   * Optional state source: given a device's serial, returns its saved state to
+   * apply at boot (before the first Inform). The simulator stays I/O-free — the
+   * caller (CLI) does any file reads. The counterpart to the `device:save` event.
+   */
+  loadState?: (serial: string) => SavedState | undefined;
 };
 

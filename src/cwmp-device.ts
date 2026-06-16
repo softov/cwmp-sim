@@ -468,6 +468,8 @@ export default class CWMPDevice {
   async handleMethod(body: string): Promise<null> {
     if (!body) {
       this._log.debug("Empty response from ACS (End of Session)");
+      // Single terminal point of a session — let listeners persist settled state.
+      this._events.emit("session-end", this);
       this.setPeriodicInform();
       return null;
     }

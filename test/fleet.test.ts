@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import CWMPSimulator from "../src/cwmp-sim.ts";
 import { buildOptions } from "../src/config/index.ts";
+import { toSimulatorOptions } from "../models.ts";
 
 function makeOptions(over: Record<string, unknown> = {}) {
   return {
@@ -47,36 +48,39 @@ test("each device gets the ACS config in its ManagementServer", () => {
 
 // --- Grouped-flag fleet composition (fleet/02 Phase 3) ---
 
+// These exercise the full CLI→library pipeline: buildOptions (config, names) →
+// toSimulatorOptions (binary, loads model files) → CWMPSimulator (objects).
+
 test("grouped flags split counts with a global index across groups", () => {
-  const opts = buildOptions({}, [
+  const cli = buildOptions({}, [
     "--acs", "http://acs/",
     "--model", "default", "--serial", "A-{i}", "--count", "2",
     "--model", "default", "--serial", "B-{i}", "--count", "3",
   ]);
-  assert.equal(opts.fleet?.groups?.length, 2);
-  const sim = new CWMPSimulator(opts);
+  assert.equal(cli.fleet?.groups?.length, 2);
+  const sim = new CWMPSimulator(toSimulatorOptions(cli));
   assert.equal(sim._devices.length, 5);
   // group-scoped serial differs per group; index runs continuously across groups
   assert.deepEqual(sim._devices.map((d) => d.getValue(SERIAL)), ["A-0", "A-1", "B-2", "B-3", "B-4"]);
 });
 
 test("a global flag applies to every group", () => {
-  const opts = buildOptions({}, [
+  const cli = buildOptions({}, [
     "--acs", "http://acs/all",
     "--model", "default", "--count", "1",
     "--model", "default", "--count", "1",
   ]);
-  const sim = new CWMPSimulator(opts);
+  const sim = new CWMPSimulator(toSimulatorOptions(cli));
   for (const d of sim._devices) assert.equal(d.getValue("Device.ManagementServer.URL"), "http://acs/all");
 });
 
 test("group flags before the first --model seed the base inherited by all groups", () => {
-  const opts = buildOptions({}, [
+  const cli = buildOptions({}, [
     "--serial", "S-{i}",
     "--model", "default", "--count", "1",
     "--model", "default", "--oui", "00E0{i:02x}", "--count", "1",
   ]);
-  const sim = new CWMPSimulator(opts);
+  const sim = new CWMPSimulator(toSimulatorOptions(cli));
   // both inherit the base serial pattern; the 2nd group additionally overrides OUI
   assert.equal(sim._devices[0].getValue(SERIAL), "S-0");
   assert.equal(sim._devices[1].getValue(SERIAL), "S-1");
@@ -84,10 +88,10 @@ test("group flags before the first --model seed the base inherited by all groups
 });
 
 test("no --model falls back to a single group from --count", () => {
-  const opts = buildOptions({}, ["--serial", "SIM-{i}", "--count", "3"]);
-  assert.equal(opts.fleet?.groups?.length, 1);
-  assert.equal(opts.fleet?.groups?.[0].count, 3);
-  const sim = new CWMPSimulator(opts);
+  const cli = buildOptions({}, ["--serial", "SIM-{i}", "--count", "3"]);
+  assert.equal(cli.fleet?.groups?.length, 1);
+  assert.equal(cli.fleet?.groups?.[0].count, 3);
+  const sim = new CWMPSimulator(toSimulatorOptions(cli));
   assert.deepEqual(sim._devices.map((d) => d.getValue(SERIAL)), ["SIM-0", "SIM-1", "SIM-2"]);
 });
 

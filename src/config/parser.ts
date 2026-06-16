@@ -1,5 +1,5 @@
-import type { CwmpSimulatorOptions, FleetGroup } from "../types.ts";
 import { configFields, type ConfigField } from "./fields.ts";
+import type { CliOptions, CliFleetGroup } from "./types.ts";
 
 const MODEL_FLAG = "--model";
 
@@ -87,12 +87,14 @@ function resolveField(
 }
 
 /**
- * Builds the simulator options from environment + CLI arguments.
+ * Parses environment + CLI arguments into a `CliOptions` — the CLI's own,
+ * **unresolved** option shape (model *names*, a storage dir; no files read).
+ * The binary turns this into a `CwmpSimulatorOptions` via `toSimulatorOptions`.
  *
  * Supports **grouped flags**: each `--model <name|path>` opens a device group;
  * group-scoped flags bind to the current group (or seed the base before the
- * first `--model`); global flags apply fleet-wide. With no `--model`, a
- * single implicit group is produced (back-compatible with `--count`).
+ * first `--model`); global flags apply fleet-wide. With no `--model`, a single
+ * implicit group is produced (back-compatible with `--count`).
  *
  * Identity templating (`{i}`) is left raw here — each device stamps its own
  * index at construction time.
@@ -100,7 +102,7 @@ function resolveField(
 export function buildOptions(
   env: NodeJS.ProcessEnv = process.env,
   argv: string[] = process.argv.slice(2)
-): CwmpSimulatorOptions {
+): CliOptions {
   const globalFields = configFields.filter((f) => (f.scope ?? "global") === "global");
   const groupFields = configFields.filter((f) => f.scope === "group");
   const groupFlags = new Set(groupFields.map((f) => f.flag).filter(Boolean) as string[]);
@@ -117,7 +119,7 @@ export function buildOptions(
 
   // Explicit groups: one per `--model` segment, inheriting base then overriding.
   const explicit = segments.slice(1);
-  const groups: FleetGroup[] = explicit.map((seg) => {
+  const groups: CliFleetGroup[] = explicit.map((seg) => {
     const tmp: Record<string, any> = {};
     for (const field of groupFields) setPath(tmp, field.path, resolveField(field, env, base, seg));
     return { count: tmp.fleet?.count ?? 1, device: tmp.device ?? {} };
@@ -127,5 +129,5 @@ export function buildOptions(
   options.fleet.groups =
     groups.length > 0 ? groups : [{ count: options.fleet.count ?? 1, device: options.device }];
 
-  return options as CwmpSimulatorOptions;
+  return options as CliOptions;
 }

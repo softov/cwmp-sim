@@ -2,10 +2,21 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import CWMPDevice from "../src/cwmp-device.ts";
+import CWMPSimulator from "../src/cwmp-sim.ts";
 import type { SavedState } from "../src/types.ts";
 
 function makeDevice() {
   return new CWMPDevice({ rootName: "InternetGatewayDevice", serialNumber: "SN-1" });
+}
+
+function makeSim(over: Record<string, unknown> = {}) {
+  return new CWMPSimulator({
+    device: { rootName: "InternetGatewayDevice", serialNumber: "SN-{i}" },
+    conn: { port: 0 },
+    acs: { url: "http://127.0.0.1:7547/" },
+    fleet: { count: 2 },
+    ...over,
+  } as any);
 }
 
 const PROVCODE = "InternetGatewayDevice.DeviceInfo.ProvisioningCode"; // writable
@@ -117,4 +128,61 @@ test("importState emits 'load' with the applied state", () => {
   d._events.on("load", (_dev: CWMPDevice, s: SavedState) => { loaded = s; });
   d.importState(state);
   assert.deepEqual(loaded, state);
+});
+
+// --- simulator event bus + auto-save (Phase 2) ---
+
+test("simulator forwards device saves as device:save with state", () => {
+  const sim = makeSim();
+  const seen: Array<[CWMPDevice, SavedState]> = [];
+  sim.on("device:save", (dev: CWMPDevice, state: SavedState) => seen.push([dev, state]));
+  sim.saveAll();
+  assert.equal(seen.length, 2);
+  assert.equal(seen[0][0], sim._devices[0]);
+  assert.ok(seen[0][1].params);
+});
+
+test("session-end auto-saves only a dirty device", () => {
+  const sim = makeSim();
+  const [a, b] = sim._devices;
+  a._dirty = false;
+  b._dirty = false;
+  a.set(PROVCODE, "CHANGED"); // only a is dirty
+  const saved: CWMPDevice[] = [];
+  sim.on("device:save", (dev: CWMPDevice) => saved.push(dev));
+
+  a._events.emit("session-end", a);
+  b._events.emit("session-end", b);
+  assert.deepEqual(saved, [a]);
+});
+
+test("stop() saves devices with unsaved changes only", () => {
+  const sim = makeSim();
+  const [a, b] = sim._devices;
+  a._dirty = false;
+  b._dirty = false;
+  a.set(PROVCODE, "X"); // only a is dirty
+  const saved: CWMPDevice[] = [];
+  sim.on("device:save", (dev: CWMPDevice) => saved.push(dev));
+  sim.stop();
+  assert.deepEqual(saved, [a]);
+});
+
+test("simulator forwards device load as device:load", () => {
+  const sim = makeSim({ fleet: { count: 1 } });
+  let loaded: { dev?: CWMPDevice; state?: SavedState } = {};
+  sim.on("device:load", (dev: CWMPDevice, state: SavedState) => { loaded = { dev, state }; });
+  const st: SavedState = { params: { [PROVCODE]: { value: "L", type: "xsd:string" } } };
+  sim._devices[0].importState(st);
+  assert.equal(loaded.dev, sim._devices[0]);
+  assert.deepEqual(loaded.state, st);
+});
+
+test("loadState provider applies saved state at boot (per serial)", () => {
+  const st: SavedState = { params: { [PROVCODE]: { value: "FROM-STORE", type: "xsd:string" } } };
+  const sim = makeSim({ fleet: { count: 1 }, loadState: (s: string) => (s === "SN-0" ? st : undefined) });
+  const d = sim._devices[0];
+  assert.notEqual(d.getValue(PROVCODE), "FROM-STORE");
+  sim._applyLoadedState(d);
+  assert.equal(d.getValue(PROVCODE), "FROM-STORE");
 });

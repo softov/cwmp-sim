@@ -5,6 +5,7 @@ import CWMPConn from "./cwmp-conn.ts";
 import type { ConnectionRequest } from "./cwmp-conn.ts";
 import type { CwmpSimulatorOptions, FleetGroup } from "./types.ts";
 import { createLogger, NULL_LOGGER, type Logger } from "./logger.ts";
+import { EventEmitter } from "node:events";
 
 /**
  * Orchestrates a fleet of simulated CPEs: builds N self-running devices and
@@ -15,7 +16,7 @@ import { createLogger, NULL_LOGGER, type Logger } from "./logger.ts";
  * implicit group from `fleet.count` — through one reusable seam, `addGroup()`,
  * so a future runtime "add devices on demand" reuses the exact same path.
  */
-export default class CWMPSimulator {
+export default class CWMPSimulator extends EventEmitter {
   _devices: CWMPDevice[] = [];
   _connectRequestServer: CWMPConn | null = null;
   _connection: ConnectionRequest | null = null;
@@ -35,6 +36,7 @@ export default class CWMPSimulator {
    * @param {object} options - Configuration options.
    */
   constructor(options: CwmpSimulatorOptions) {
+    super();
     this._options = { ...options };
 
     // Per-instance logger: a consumer-supplied logger wins; otherwise build the
@@ -76,6 +78,7 @@ export default class CWMPSimulator {
         crUser: this._options.conn.user,
         crPass: this._options.conn.pass,
       });
+      this._wireDeviceEvents(device);
       this._devices.push(device);
       made.push(device);
 
@@ -84,6 +87,32 @@ export default class CWMPSimulator {
     }
 
     return made;
+  }
+
+  /**
+   * Forwards a device's lifecycle events to the fleet bus and wires the
+   * dirty-gated auto-save after each CWMP session.
+   */
+  _wireDeviceEvents(device: CWMPDevice): void {
+    device._events.on("save", (dev, state) => this.emit("device:save", dev, state));
+    device._events.on("load", (dev, state) => this.emit("device:load", dev, state));
+    device._events.on("session-end", (dev: CWMPDevice) => {
+      if (dev._dirty) dev.saveState();
+    });
+  }
+
+  /**
+   * Applies any saved state (from `options.loadState`) onto a device just before
+   * it boots — keeps load at boot-time (not construction) and I/O in the caller.
+   */
+  _applyLoadedState(device: CWMPDevice): void {
+    const saved = this._options.loadState?.(device._serialNumber);
+    if (saved) device.importState(saved);
+  }
+
+  /** Snapshots every device's state (each emits `device:save`). */
+  saveAll(): void {
+    for (const device of this._devices) device.saveState();
   }
 
   /**
@@ -101,6 +130,9 @@ export default class CWMPSimulator {
       onRequest: () => device.onConnectionRequest(),
     });
     device.setConnectionRequestURL(`${connection.url}${hash}`);
+    // Restore saved state before the first Inform; device.start() then sets the
+    // clean baseline so loaded values aren't treated as unsaved changes.
+    this._applyLoadedState(device);
     setTimeout(() => device.start(), delayMs);
   }
 
@@ -132,10 +164,14 @@ export default class CWMPSimulator {
   }
 
   /**
-   * Stops every device session and closes the Connection Request server.
+   * Saves any devices with unsaved changes, stops every device session, and
+   * closes the Connection Request server.
    */
   stop() {
-    for (const device of this._devices) device.stop();
+    for (const device of this._devices) {
+      if (device._dirty) device.saveState();
+      device.stop();
+    }
     if (this._connectRequestServer?._server) {
       this._connectRequestServer._server.close();
     }
