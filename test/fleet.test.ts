@@ -105,8 +105,8 @@ test("no --model falls back to a single group from --count", () => {
 test("addGroup is reusable and keeps the fleet index running", () => {
   const sim = new CWMPSimulator(makeOptions({ count: 2 }));
   assert.equal(sim._devices.length, 2);
-  const added = sim.addGroup({ count: 2, device: { rootName: "Device", serialNumber: "SIM-{i}" } });
-  assert.equal(added.length, 2);
+  const handle = sim.addGroup({ count: 2, device: { rootName: "Device", serialNumber: "SIM-{i}" } });
+  assert.equal(handle.devices.length, 2);
   assert.equal(sim._devices.length, 4);
   // indices continue past the initial group (0,1 → 2,3)
   assert.deepEqual(sim._devices.map((d) => d.getValue(SERIAL)), ["SIM-0", "SIM-1", "SIM-2", "SIM-3"]);

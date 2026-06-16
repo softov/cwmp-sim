@@ -27,6 +27,18 @@ export function hashConnectionPath(serial: string): string {
   return crypto.createHash("md5").update(serial).digest("hex").slice(0, 8);
 }
 
+/** Friendly names for diagnostic/transfer task types (for the `device:diagnostic` bus). */
+const TASK_NAMES: Record<string, string> = {
+  "diag-ping": "ping",
+  "diag-traceroute": "traceroute",
+  "diag-download": "download",
+  "diag-upload": "upload",
+  "diag-wifi": "wifi",
+  "task-download": "transfer",
+  "task-upload": "transfer",
+};
+const taskName = (type: string): string => TASK_NAMES[type] ?? type;
+
 /**
  * Represents the simulated CPE device.
  * Manages the data model (parameters), event listeners, and internal state.
@@ -356,16 +368,12 @@ export default class CWMPDevice {
         password: this.getValue(`${ms}.Password`),
         logger: this._log,
       });
-      // A completed diagnostic/transfer schedules a follow-up inform.
-      this.addListener("sessionInform", (val: string) => {
-        this.setPeriodicInform(val, 1000);
-        this._periodicInformDisabled = true;
-      });
     }
     // Clean baseline at boot: construction/setup writes (identity, MAC, ACS config)
     // and any state loaded via importState() are re-derivable, so they're not
     // "unsaved". Only changes from here (the ACS session) mark the device dirty.
     this._dirty = false;
+    this._events.emit("boot", this, event);
     this.startSession(event);
   }
 
@@ -398,6 +406,10 @@ export default class CWMPDevice {
     this._periodicInformDisabled = false;
     const sn = this.getValue(`${this._rootName}.DeviceInfo.SerialNumber`);
     this._log.info(`[${sn}] Starting session with event: ${event}`);
+
+    // Lifecycle signals for the fleet bus: a session begins with an Inform.
+    this._events.emit("session-start", this, event);
+    this._events.emit("inform", this, event);
 
     try {
       let body = methods.Inform(this, event);
@@ -519,6 +531,7 @@ export default class CWMPDevice {
    */
   finishTask(task: CWMPTask) {
     if (!task) return;
+    this._events.emit("diagnostic", this, taskName(task._type), "end");
     task._isRequested = false;
     task._isRunning = false;
     switch (task._type) {
@@ -527,13 +540,16 @@ export default class CWMPDevice {
       case "diag-ping":
       case "diag-traceroute":
       case "diag-wifi":
-        this.fireEvent("taskFinished", "sessionInform", "8 DIAGNOSTICS COMPLETE");
+        this.setPeriodicInform("8 DIAGNOSTICS COMPLETE", 1000);
+        this._periodicInformDisabled = true;
         break;
       case "task-download":
-        this.fireEvent("taskFinished", "sessionInform", "7 TRANSFER COMPLETE,M Download");
+        this.setPeriodicInform("7 TRANSFER COMPLETE,M Download", 1000);
+        this._periodicInformDisabled = true;
         break;
       case "task-upload":
-        this.fireEvent("taskFinished", "sessionInform", "7 TRANSFER COMPLETE,M Upload");
+        this.setPeriodicInform("7 TRANSFER COMPLETE,M Upload", 1000);
+        this._periodicInformDisabled = true;
         break;
       default:
         break;
@@ -545,6 +561,7 @@ export default class CWMPDevice {
    * @param {CWMPTask} task - The task to add.
    */
   addTask(task: CWMPTask) {
+    this._events.emit("diagnostic", this, taskName(task._type), "start");
     this._pendingTask.push(task);
     if (!this._pendingTimeout) {
       this._pendingTimeout = setTimeout(() => this.runTask(), 1000);

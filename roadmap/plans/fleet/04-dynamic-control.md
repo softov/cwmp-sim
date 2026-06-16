@@ -1,6 +1,6 @@
 <!--
 Domain: fleet
-Status: ⚪ Not started
+Status: 🟢 Shipped
 Priority: High
 Created: 2026-06-16
 Revalidated: 2026-06-16
@@ -10,7 +10,7 @@ Reference: ./00-fleet.md
 
 # FLEET-04 — Dynamic fleet control + lifecycle event bus
 
-_Status: ⚪ Not started · Priority: High · Created: 2026-06-16_
+_Status: 🟢 Shipped (Phases 1–2) · Priority: High · Created: 2026-06-16_
 
 <!-- Status legend: ⚪ Not started · 🟡 In progress / Partial · 🟢 Shipped · 🔴 Blocked.
      When status changes, update it in THREE places: this header, ./00-fleet.md, and ../index.md. -->
@@ -81,23 +81,25 @@ CWMPDevice (_events)
 
 ## Phases
 
-### Phase 1 — Control API: group registry, handles, remove/restart
+### Phase 1 — Control API: group registry, handles, remove/restart — 🟢 SHIPPED
 
-**Objective:** add/remove/restart groups and devices at runtime. **Validation:** add → handle.devices; remove → stopped, CR-unregistered, dropped, `device:remove` fired; restart → reboots; index stays monotonic.
+**Objective:** add/remove/restart groups and devices at runtime. **Validation:** add → handle.devices; remove → stopped, CR-unregistered, dropped, `device:remove` fired; restart → reboots; index stays monotonic. ✅ 9 tests (`test/dynamic.test.ts`); full suite **167 green**; `tsc` clean.
 
-- **`src/types.ts`** — `FleetGroupHandle`.
-- **`src/cwmp-sim.ts`** — `_groups` + `_nextGroupId`; `addGroup` returns a handle (tracks, emits `device:add`); `removeGroup(id)`/`removeDevice(device)` (save-if-dirty → `stop` → `unregister` CR if listening → `device:remove` → splice from `_devices` + group); `restartGroup(id)`/`rebootDevice(device)` (`stop`+`start("1 BOOT")`); handle `.remove()`/`.restart()` delegate.
-- **Tests:** `test/dynamic.test.ts` — `addGroup` → handle `{id, devices, remove, restart}`; `removeGroup` drops devices + emits `device:remove` (+ saves a dirty one); `removeDevice`; `restartGroup`/`rebootDevice` call through; index monotonic across remove+add; `addGroup` mid-run registers a CR route (when started).
-- **Note:** update `test/fleet.test.ts` "addGroup is reusable" → assert on `handle.devices`.
+- [x] **`src/cwmp-sim.ts`** — exported `FleetGroupHandle` (kept here, not `types.ts`, since it references the `CWMPDevice` class); `_groups` registry + `_nextGroupId`; `addGroup` returns a handle (tracks, emits `device:add`); `removeGroup(id)`/`removeDevice(device)` (save-if-dirty → `stop` → `unregister` CR when listening → splice from `_devices` + group → `device:remove`); `restartGroup(id)`/`rebootDevice(device)` (`stop`+`start("1 BOOT")`); handle `.remove()`/`.restart()` delegate.
+- [x] **Tests:** `test/dynamic.test.ts` — handle shape; runtime `device:add`; `removeGroup`/`removeDevice` drop + `device:remove` + dirty-save + unregister-no-throw + unknown-id no-op; `rebootDevice`/`restartGroup` call `stop`+`start("1 BOOT")` (stubbed, no network); monotonic index across remove+add.
+- [x] **`test/fleet.test.ts`** "addGroup is reusable" → asserts on `handle.devices`.
 
-### Phase 2 — Lifecycle event bus
+**Note:** `FleetGroupHandle` lives in `src/cwmp-sim.ts` (not `src/types.ts` as first planned) to avoid a `types.ts → CWMPDevice` import cycle.
 
-**Objective:** the simulator emits `device:boot`/`device:session`/`device:inform`/`device:diagnostic`. **Validation:** each device hook fires the forwarded `device:*` event with the right payload.
+### Phase 2 — Lifecycle event bus — 🟢 SHIPPED
 
-- **`src/cwmp-device.ts`** — emit `boot` (in `start`), `session` start (in `startSession`) + reuse `session-end` as `session` end, `inform` (event code, in `startSession`), `diagnostic` (type+phase, in `runTask` start / `finishTask` end). Keep the internal `session-end` auto-save contract.
-- **`src/cwmp-sim.ts`** — `_wireDeviceEvents` forwards the new device events as `device:*` (with payloads: device, + phase/eventCode/type).
-- **Tests:** `test/dynamic.test.ts` — emit each device event (directly or via the hook) → assert the forwarded `device:*` with payload; `device:session` fires `start` then `end`; auto-save on session end still works.
-- **`PENDING.md`** — note dynamic control + event bus shipped; cross-ref #16.
+**Objective:** the simulator emits `device:boot`/`device:session`/`device:inform`/`device:diagnostic`. **Validation:** each device hook fires the forwarded `device:*` event with the right payload. ✅ 5 tests; full suite **172 green**; `tsc` clean.
+
+- [x] **`src/cwmp-device.ts`** — emits `boot` (in `start`), `session-start` + `inform` (event code, in `startSession`), keeps `session-end` (in `handleMethod`), `diagnostic` (friendly type + phase, in `addTask` start / `finishTask` end via a `TASK_NAMES` map: ping/traceroute/download/upload/wifi/transfer).
+- [x] **`src/cwmp-sim.ts`** — `_wireDeviceEvents` forwards `boot`→`device:boot`, `inform`→`device:inform`(code), `session-start`→`device:session`("start",code), `session-end`→`device:session`("end") **+** the dirty-gated auto-save, `diagnostic`→`device:diagnostic`(type,phase).
+- [x] **Tests:** `test/dynamic.test.ts` — forwarding of all `device:*` with payloads; `device.start()`→boot; `startSession()`→session-start+inform; `addTask`/`finishTask`→diagnostic start/end (friendly type); `session-end` still auto-saves.
+
+**Design note:** the device uses separate `session-start`/`session-end` events (not a generic `session` with a phase param) — the simulator unifies them into `device:session` with a `"start"`/`"end"` phase. `diagnostic` start fires at `addTask` (one per request) and end at `finishTask` (one per completion) — unambiguous, avoiding the `runTask` queue-processing edge.
 
 ## Risks & tradeoffs
 
@@ -109,8 +111,8 @@ CWMPDevice (_events)
 
 ## Resume state
 
-- **Done so far:** Plan written; 6 decisions locked (Gate 2 answered). No code.
-- **Next action:** Phase 1 — `FleetGroupHandle` + `_groups` registry + `addGroup` handle return + `removeGroup`/`removeDevice`/`restartGroup`/`rebootDevice` + `device:add`/`device:remove`, with `test/dynamic.test.ts`.
+- **Done:** **Both phases 🟢 shipped.** P1 control API (handles, registry, remove/restart, per-device, `device:add`/`device:remove`, monotonic index). P2 lifecycle bus (`device:boot`/`session`(start,end)/`inform`(code)/`diagnostic`(type,phase) + existing `save`/`load`). `test/dynamic.test.ts` (14 tests); full suite **172 green**; `tsc` clean.
+- **Next action:** none for fleet/04. The bus + control API are the foundation for **#16 dashboard** (HTTP/WS server + UI consuming `device:*` and calling `addGroup`/`removeGroup`/`restartGroup`). Optional later: throttle/batch `device:inform` for the dashboard; the AddObject state round-trip refinement (fleet/03 risk).
 - **Open questions:** None.
 - **Watch out for:** keep `addGroup`'s existing "running → register + boot" path working; `removeDevice` must `unregister` the CR route only when the server is listening; keep the `session-end` → auto-save contract intact when renaming/extending session events.
 

@@ -7,14 +7,25 @@ import type { CwmpSimulatorOptions, FleetGroup } from "./types.ts";
 import { createLogger, NULL_LOGGER, type Logger } from "./logger.ts";
 import { EventEmitter } from "node:events";
 
+/** A live handle to one added group — its devices + remove/restart controls. */
+export type FleetGroupHandle = {
+  id: string;
+  devices: CWMPDevice[];
+  /** Remove the group's devices from the fleet (saves dirty, stops, CR-unregisters). */
+  remove(): void;
+  /** Reboot the group's devices in place ("1 BOOT"). */
+  restart(): void;
+};
+
 /**
  * Orchestrates a fleet of simulated CPEs: builds N self-running devices and
  * fronts them with a single shared Connection Request server that routes by URL
  * path (`/{hash}`). Each device runs its own CWMP session with the ACS.
  *
- * The fleet is built from `fleet.groups` (mixed device types) — or a single
- * implicit group from `fleet.count` — through one reusable seam, `addGroup()`,
- * so a future runtime "add devices on demand" reuses the exact same path.
+ * The fleet is built from `fleet.groups` (mixed device types) through one
+ * reusable seam, `addGroup()` — the same path used to add/remove/restart groups
+ * at runtime. An EventEmitter: emits `device:add`/`device:remove`/`device:save`/
+ * `device:load` (and more — see fleet/04 Phase 2).
  */
 export default class CWMPSimulator extends EventEmitter {
   _devices: CWMPDevice[] = [];
@@ -24,6 +35,9 @@ export default class CWMPSimulator extends EventEmitter {
   _log: Logger = NULL_LOGGER;
   /** Running identity index, incremented across every device of every group. */
   _nextIndex = 0;
+  /** Live group registry, keyed by handle id. */
+  _groups: Map<string, { id: string; devices: CWMPDevice[] }> = new Map();
+  _nextGroupId = 0;
 
   /**
    * Builds the fleet from `fleet.groups` (or a single implicit group derived
@@ -51,14 +65,14 @@ export default class CWMPSimulator extends EventEmitter {
 
   /**
    * Builds (and, if the fleet is already running, registers + boots) the devices
-   * for one group. Each device gets a unique fleet index and the ACS/CR config.
-   * This is the single seam shared by construction-time composition and any
-   * future runtime "add devices" call.
-   * @returns the devices created for this group.
+   * for one group, tracks it in the registry, and returns a handle to control it.
+   * The single seam shared by construction-time composition and runtime adds.
+   * @returns a handle: `{ id, devices, remove(), restart() }`.
    */
-  addGroup(group: FleetGroup): CWMPDevice[] {
+  addGroup(group: FleetGroup): FleetGroupHandle {
+    const id = `g${this._nextGroupId++}`;
     const count = Math.max(1, group.count ?? 1);
-    const made: CWMPDevice[] = [];
+    const devices: CWMPDevice[] = [];
 
     for (let i = 0; i < count; i++) {
       const device = new CWMPDevice({
@@ -76,13 +90,61 @@ export default class CWMPSimulator extends EventEmitter {
       });
       this._wireDeviceEvents(device);
       this._devices.push(device);
-      made.push(device);
+      devices.push(device);
+      this.emit("device:add", device);
 
       // Already listening (runtime add) → register + boot immediately.
       if (this._connection) this._registerAndBoot(device, 0);
     }
 
-    return made;
+    this._groups.set(id, { id, devices });
+    return {
+      id,
+      devices,
+      remove: () => this.removeGroup(id),
+      restart: () => this.restartGroup(id),
+    };
+  }
+
+  /** Removes every device in a group, then forgets the group. No-op if unknown. */
+  removeGroup(id: string): void {
+    const entry = this._groups.get(id);
+    if (!entry) return;
+    for (const device of [...entry.devices]) this.removeDevice(device);
+    this._groups.delete(id);
+  }
+
+  /** Reboots every device in a group in place. No-op if unknown. */
+  restartGroup(id: string): void {
+    const entry = this._groups.get(id);
+    if (!entry) return;
+    for (const device of [...entry.devices]) this.rebootDevice(device);
+  }
+
+  /**
+   * Removes one device from the fleet: saves it if dirty, stops its session,
+   * unregisters its CR route (when listening), drops it from `_devices` and its
+   * group, and emits `device:remove`. The fleet index is not reused.
+   */
+  removeDevice(device: CWMPDevice): void {
+    if (device._dirty) device.saveState();
+    device.stop();
+    this._connectRequestServer?.unregister(device.getConnectionHash());
+
+    const i = this._devices.indexOf(device);
+    if (i >= 0) this._devices.splice(i, 1);
+    for (const entry of this._groups.values()) {
+      const j = entry.devices.indexOf(device);
+      if (j >= 0) entry.devices.splice(j, 1);
+    }
+
+    this.emit("device:remove", device);
+  }
+
+  /** Reboots one device in place: `stop()` then `start("1 BOOT")`. */
+  rebootDevice(device: CWMPDevice): void {
+    device.stop();
+    device.start("1 BOOT");
   }
 
   /**
@@ -92,7 +154,13 @@ export default class CWMPSimulator extends EventEmitter {
   _wireDeviceEvents(device: CWMPDevice): void {
     device._events.on("save", (dev, state) => this.emit("device:save", dev, state));
     device._events.on("load", (dev, state) => this.emit("device:load", dev, state));
+    device._events.on("boot", (dev, event) => this.emit("device:boot", dev, event));
+    device._events.on("inform", (dev, event) => this.emit("device:inform", dev, event));
+    device._events.on("session-start", (dev, event) => this.emit("device:session", dev, "start", event));
+    device._events.on("diagnostic", (dev, type, phase) => this.emit("device:diagnostic", dev, type, phase));
     device._events.on("session-end", (dev: CWMPDevice) => {
+      this.emit("device:session", dev, "end");
+      // Dirty-gated auto-save after each session.
       if (dev._dirty) dev.saveState();
     });
   }

@@ -26,6 +26,7 @@ Forward-looking enhancements (items that are *current gaps* live under Known lim
 - [x] 3. **Staggered boot / inform jitter** — `--boot-delay` spaces each device's boot so N devices don't hammer the ACS at once (part of the fleet runtime). **(S)**
 - [x] 4. **Fleet definition** — mixed-type fleets via **grouped flags**: each `--model <name|default>` opens a device group, group-scoped flags bind to it, global flags apply fleet-wide. See `roadmap/plans/fleet/02-device-templates.md` (Phase 3). _(A single `config.json` source — describing the whole fleet in one file — is a deliberate future option, not done here.)_ **(M)**
 - [x] 4b. **Per-device state persistence** — writable params (what the ACS sets) survive restarts. IO-free lib (`exportState`/`importState` + `device:save`/`device:load` events); binary file store (root `storage.ts`, `--storage-dir`, default `~/.cwmp-sim/devices/`), keyed by serial; saved on stop + after each session (dirty-gated). See `roadmap/plans/fleet/03-device-state.md`. **(M)**
+- [x] 4c. **Dynamic fleet control + event bus** — `addGroup` returns a handle; `removeGroup`/`restartGroup` + per-device `removeDevice`/`rebootDevice` at runtime; `CWMPSimulator` is an EventEmitter (`device:add`/`remove`/`boot`/`session`/`inform`/`diagnostic`/`save`/`load`). The foundation for #16. See `roadmap/plans/fleet/04-dynamic-control.md`. **(M)**
 
 ### B. Connection Request mechanisms (currently HTTP + Digest only)
 - [ ] 5. **STUN-based connection requests** (TR-069 Annex G) — for CPEs behind NAT. **(M)**
