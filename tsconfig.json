@@ -19,7 +19,9 @@
   "include": [
     "src/**/*",
     "test/**/*",
-    "main.ts"
+    "main.ts",
+    "storage.ts",
+    "models.ts"
   ],
   "exclude": [
     "node_modules"
