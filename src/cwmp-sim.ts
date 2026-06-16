@@ -1,9 +1,9 @@
 "use strict";
 
-import CWMPDevice from "./cwmp-device.ts";
+import CWMPDevice, { newDeviceStats } from "./cwmp-device.ts";
 import CWMPConn from "./cwmp-conn.ts";
 import type { ConnectionRequest } from "./cwmp-conn.ts";
-import type { CwmpSimulatorOptions, FleetGroup } from "./types.ts";
+import type { CwmpSimulatorOptions, FleetGroup, DeviceStats, RpcEvent } from "./types.ts";
 import { createLogger, NULL_LOGGER, type Logger } from "./logger.ts";
 import { EventEmitter } from "node:events";
 
@@ -38,6 +38,8 @@ export default class CWMPSimulator extends EventEmitter {
   /** Live group registry, keyed by handle id. */
   _groups: Map<string, { id: string; devices: CWMPDevice[] }> = new Map();
   _nextGroupId = 0;
+  /** Fleet-wide stats, accumulated at event time (lifetime; survives device removal). */
+  _stats: DeviceStats = newDeviceStats();
 
   /**
    * Builds the fleet from `fleet.groups` (or a single implicit group derived
@@ -155,14 +157,45 @@ export default class CWMPSimulator extends EventEmitter {
     device._events.on("save", (dev, state) => this.emit("device:save", dev, state));
     device._events.on("load", (dev, state) => this.emit("device:load", dev, state));
     device._events.on("boot", (dev, event) => this.emit("device:boot", dev, event));
-    device._events.on("inform", (dev, event) => this.emit("device:inform", dev, event));
+    device._events.on("inform", (dev, event) => {
+      this._stats.informs++;
+      this._stats.lastInform = Date.now();
+      this.emit("device:inform", dev, event);
+    });
     device._events.on("session-start", (dev, event) => this.emit("device:session", dev, "start", event));
     device._events.on("diagnostic", (dev, type, phase) => this.emit("device:diagnostic", dev, type, phase));
+    // RPC telemetry → fleet-wide totals (lifetime: bumped at event time) + the bus.
+    device._events.on("rpc", (dev: CWMPDevice, info: RpcEvent) => {
+      const at = Date.now();
+      if (info.dir === "recv") {
+        this._stats.rpc[info.method] = (this._stats.rpc[info.method] ?? 0) + 1;
+        this._stats.lastRecv = { method: info.method, at };
+      } else if (info.dir === "sent") {
+        this._stats.sent[info.method] = (this._stats.sent[info.method] ?? 0) + 1;
+        this._stats.lastSent = { method: info.method, at };
+      }
+      if (!info.ok) this._stats.failures++;
+      this.emit("device:rpc", dev, info);
+    });
     device._events.on("session-end", (dev: CWMPDevice) => {
       this.emit("device:session", dev, "end");
       // Dirty-gated auto-save after each session.
       if (dev._dirty) dev.saveState();
     });
+  }
+
+  /** Fleet-wide stats (lifetime/cumulative; computed at event time, survives removal). */
+  globalStats(): DeviceStats {
+    return {
+      rpc: { ...this._stats.rpc },
+      sent: { ...this._stats.sent },
+      informs: this._stats.informs,
+      failures: this._stats.failures,
+      lastRecv: this._stats.lastRecv,
+      lastSent: this._stats.lastSent,
+      lastInform: this._stats.lastInform,
+      tasks: [...this._stats.tasks],
+    };
   }
 
   /**

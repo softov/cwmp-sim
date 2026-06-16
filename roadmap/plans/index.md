@@ -42,6 +42,7 @@ Reference: [`00-dashboard.md`](./dashboard/00-dashboard.md)
 | # | Plan | Status | Priority | Dependencies |
 |---|------|--------|----------|--------------|
 | 01 | [Web dashboard + control API](./dashboard/01-dashboard.md) | 🟢 Shipped | Medium | fleet/04 (🟢) |
+| 02 | [Metrics & observability](./dashboard/02-metrics-observability.md) | 🟢 Shipped | Medium | dashboard/01 (🟢) |
 
 ## docs
 

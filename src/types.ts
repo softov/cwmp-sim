@@ -3,6 +3,36 @@ import type { Logger, LogLevel, LoggerSink } from "./logger.ts";
 /** Parsed model: the inferred root key (`Device` / `InternetGatewayDevice`) + the tree. */
 export type LoadedModel = { root: string; tree: Record<string, any> };
 
+/** A method + when it happened (for last-received / last-sent RPC). */
+export type RpcMark = { method: string; at: number };
+
+/**
+ * Runtime counters/telemetry — kept per device, and (same shape) accumulated
+ * fleet-wide on the simulator. In-memory only; reset on process restart, not
+ * part of `SavedState` (telemetry ≠ data model).
+ */
+export type DeviceStats = {
+  /** Received RPC counts, by method. */
+  rpc: Record<string, number>;
+  /** Sent RPC counts, by method (best-effort: Inform + `<Method>Response`). */
+  sent: Record<string, number>;
+  /** Informs sent. */
+  informs: number;
+  /** Write failures (e.g. SetParameterValues rejected a value). */
+  failures: number;
+  lastRecv: RpcMark | null;
+  lastSent: RpcMark | null;
+  /** Timestamp of the last Inform. */
+  lastInform: number | null;
+  /** Pending tasks (queued diagnostics/transfers); device-only, omitted on the global. */
+  pending?: number;
+  /** Recent tasks the device ran (newest last; capped). */
+  tasks: { type: string; at: number }[];
+};
+
+/** Payload of the `device:rpc` event (forwarded on the bus). */
+export type RpcEvent = { method: string; dir: "recv" | "sent" | "fail"; ok: boolean; detail?: string };
+
 /**
  * A device's persistable state — the writable parameter values it has accumulated
  * (e.g. what an ACS set), plus any SetParameterAttributes. Read-only/structural

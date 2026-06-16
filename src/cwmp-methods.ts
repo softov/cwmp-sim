@@ -272,6 +272,7 @@ function SetParameterValues(device: CWMPDevice, request: XmlNode): string {
     device._lastSetValues.set(name, value);
     if (!device.set(name, value)) {
       device._log.warn(`Failed to update ${name}`);
+      device.recordFault(name);
       failed.push(name);
     }
   }

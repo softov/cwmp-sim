@@ -15,6 +15,21 @@
       --line: #1e293b
     }
 
+    /* Scrollbar styling */
+    *::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+
+    *::-webkit-scrollbar-thumb {
+      background: var(--line);
+      border-radius: 4px;
+    }
+
+    *::-webkit-scrollbar-thumb:hover {
+      background: var(--muted);
+    }
+
     * {
       box-sizing: border-box
     }
@@ -185,6 +200,110 @@
       color: var(--accent);
       margin: .2rem 0 .6rem
     }
+
+    /* metrics + observability (dashboard/02) */
+    #global {
+      padding: .4rem .55rem;
+      margin-bottom: .6rem;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: var(--panel)
+    }
+
+    #global h3 {
+      margin: 0 0 .3rem;
+      font-size: 10px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .06em
+    }
+
+    .kv {
+      display: flex;
+      justify-content: space-between;
+      gap: .75rem
+    }
+
+    .kv .k {
+      color: var(--muted)
+    }
+
+    .kv b {
+      color: var(--accent);
+      font-weight: normal
+    }
+
+    .ago {
+      float: right;
+      color: var(--muted);
+      font-size: 11px
+    }
+
+    .device.sel .ago {
+      color: var(--bg)
+    }
+
+    .summary {
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      padding: .45rem .55rem;
+      margin: .5rem 0
+    }
+
+    .summary h3 {
+      margin: 0 0 .3rem;
+      font-size: 10px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .06em
+    }
+
+    .tasks {
+      margin-top: .35rem;
+      max-height: 78px;
+      overflow: auto;
+      font-size: 11px;
+      color: var(--muted)
+    }
+
+    .psearch {
+      margin: .5rem 0 .3rem
+    }
+
+    #feed {
+      display: flex;
+      flex-direction: column;
+      padding: 0;
+      overflow: hidden
+    }
+
+    #feedhead {
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      padding: .35rem 1rem;
+      border-bottom: 1px solid var(--line);
+      flex: 0 0 auto
+    }
+
+    #feedhead input {
+      width: auto;
+      flex: 1
+    }
+
+    #feedbody {
+      flex: 1 1 auto;
+      overflow: auto;
+      padding: .4rem 1rem
+    }
+
+    .ev .f {
+      color: #f87171
+    }
+
+    .ev.hide {
+      display: none
+    }
   </style>
 </head>
 
@@ -196,7 +315,7 @@
       <input id="g-model" placeholder="model path (blank=default)" size="26">
       <input id="g-serial" value="SIM-{i}" size="12">
       <input id="g-count" type="number" value="1" min="1" style="width:58px">
-      <button>add group</button>
+      <button>+ add group</button>
     </form>
   </header>
   <main>
@@ -204,7 +323,14 @@
     <div id="device">
       <p class="muted">select a device</p>
     </div>
-    <div id="feed"></div>
+    <div id="feed">
+      <div id="feedhead">
+        <span>events <b id="evcount" style="color:var(--accent)">0</b></span>
+        <input id="logsearch" placeholder="filter log…">
+        <button id="logclear">clear</button>
+      </div>
+      <div id="feedbody"></div>
+    </div>
   </main>
   <script>
     var $ = function (s) { return document.querySelector(s) };
@@ -214,18 +340,63 @@
     function act(path, method, body) { var o = { method: method }; if (body) { o.headers = { 'content-type': 'application/json' }; o.body = JSON.stringify(body) } return fetch(path, o).then(function (r) { loadFleet(); return r }) }
     function enc(s) { return encodeURIComponent(s) }
 
+    var fleetData = { devices: [], groups: [], global: {} };
+    var lastInform = {}; // serial -> timestamp
+
+    function row(k, v) {
+      var r = document.createElement('div'); r.className = 'kv';
+      var a = document.createElement('span'); a.className = 'k'; a.textContent = k;
+      var b = document.createElement('b'); b.textContent = v;
+      r.append(a, b); return r;
+    }
+    function sumRpc(o) { var n = 0; for (var k in (o || {})) n += o[k]; return n; }
+    function ago(ts) {
+      if (!ts) return '—';
+      var s = Math.max(0, Math.round((Date.now() - ts) / 1000));
+      if (s < 60) return s + 's ago';
+      if (s < 3600) return Math.floor(s / 60) + 'm ago';
+      return Math.floor(s / 3600) + 'h ago';
+    }
+    function tick() {
+      document.querySelectorAll('#fleet .device').forEach(function (d) {
+        var a = d.querySelector('.ago'); if (a) a.textContent = ago(lastInform[d.getAttribute('data-serial')]);
+      });
+    }
+    setInterval(tick, 1000);
+
+    function renderGlobal() {
+      var box = $('#global'); if (!box) return;
+      var g = fleetData.global || {};
+      var cur = { informs: 0, recv: 0, sent: 0, failures: 0 };
+      fleetData.devices.forEach(function (d) { cur.informs += d.informs || 0; cur.recv += d.recv || 0; cur.sent += d.sent || 0; cur.failures += d.failures || 0; });
+      box.innerHTML = '';
+      var h = document.createElement('h3'); h.textContent = 'fleet — lifetime · current';
+      box.append(h,
+        row('devices', fleetData.devices.length),
+        row('informs', (g.informs || 0) + ' · ' + cur.informs),
+        row('rpc recv', sumRpc(g.rpc) + ' · ' + cur.recv),
+        row('rpc sent', sumRpc(g.sent) + ' · ' + cur.sent),
+        row('failures', (g.failures || 0) + ' · ' + cur.failures));
+    }
+
     function loadFleet() { api('/api/fleet').then(renderFleet) }
     function renderFleet(f) {
+      fleetData = f;
+      f.devices.forEach(function (d) { if (d.lastInform) lastInform[d.serial] = d.lastInform; });
       var root = $('#fleet'); root.innerHTML = '';
+      var gbox = document.createElement('div'); gbox.id = 'global'; root.append(gbox); renderGlobal();
       f.groups.forEach(function (g) {
         var box = document.createElement('div'); box.className = 'group';
         var head = document.createElement('div'); head.className = 'ghead';
         head.append(g.id + ' × ' + g.count + ' ',
-          btn('restart', function () { act('/api/groups/' + g.id + '/restart', 'POST') }),
-          btn('remove', function () { act('/api/groups/' + g.id, 'DELETE') }));
+          btn('↻ restart', function () { act('/api/groups/' + g.id + '/restart', 'POST') }),
+          btn('🗑 remove', function () { act('/api/groups/' + g.id, 'DELETE') }));
         box.append(head);
         g.devices.forEach(function (s) {
-          var d = document.createElement('div'); d.className = 'device' + (s === selected ? ' sel' : ''); d.textContent = s;
+          var d = document.createElement('div'); d.className = 'device' + (s === selected ? ' sel' : '');
+          d.setAttribute('data-serial', s);
+          var age = document.createElement('span'); age.className = 'ago'; age.textContent = ago(lastInform[s]);
+          d.append(s, age);
           d.onclick = function () { selectDevice(s) }; box.append(d);
         });
         root.append(box);
@@ -234,26 +405,51 @@
 
     function selectDevice(serial) {
       selected = serial;
-      document.querySelectorAll('.device').forEach(function (e) { e.classList.toggle('sel', e.textContent === serial) });
+      document.querySelectorAll('.device').forEach(function (e) { e.classList.toggle('sel', e.getAttribute('data-serial') === serial) });
       api('/api/devices/' + enc(serial)).then(function (d) {
         var panel = $('#device'); panel.innerHTML = '';
         var h = document.createElement('h2'); h.textContent = serial + ' ';
         var rt = document.createElement('span'); rt.className = 'muted'; rt.textContent = '(' + d.root + ')'; h.append(rt);
+
+        var st = d.stats || {};
+        var sm = document.createElement('div'); sm.className = 'summary';
+        var sh = document.createElement('h3'); sh.textContent = 'stats';
+        sm.append(sh,
+          row('informs', st.informs || 0),
+          row('rpc recv', sumRpc(st.rpc)),
+          row('rpc sent', sumRpc(st.sent)),
+          row('failures', st.failures || 0),
+          row('pending', st.pending || 0),
+          row('last recv', st.lastRecv ? st.lastRecv.method : '—'),
+          row('last sent', st.lastSent ? st.lastSent.method : '—'),
+          row('last inform', ago(st.lastInform)));
+        var tk = document.createElement('div'); tk.className = 'tasks';
+        tk.textContent = 'recent tasks: ' + ((st.tasks || []).slice().reverse().map(function (t) { return t.type }).join(', ') || '—');
+        sm.append(tk);
+
         var actions = document.createElement('div'); actions.className = 'actions';
         actions.append(
-          btn('inform', function () { act('/api/devices/' + enc(serial) + '/inform', 'POST') }),
-          btn('reboot', function () { act('/api/devices/' + enc(serial) + '/reboot', 'POST') }),
-          btn('remove', function () { removeDev(serial) }));
+          btn('ⓘ inform', function () { act('/api/devices/' + enc(serial) + '/inform', 'POST') }),
+          btn('⟳ reboot', function () { act('/api/devices/' + enc(serial) + '/reboot', 'POST') }),
+          btn('🗑 remove', function () { removeDev(serial) }));
+
+        var search = document.createElement('input'); search.className = 'psearch'; search.placeholder = 'search params (key or value)…';
         var table = document.createElement('table');
-        d.params.forEach(function (p) {
-          var tr = document.createElement('tr');
-          var td1 = document.createElement('td'); td1.textContent = p.name;
-          var td2 = document.createElement('td');
-          if (p.writable) { var inp = document.createElement('input'); inp.value = p.value; inp.addEventListener('change', function () { setParam(p.name, inp.value) }); td2.append(inp) }
-          else { var sp = document.createElement('span'); sp.className = 'ro'; sp.textContent = p.value; td2.append(sp) }
-          tr.append(td1, td2); table.append(tr);
-        });
-        panel.append(h, actions, table);
+        function renderRows(q) {
+          table.innerHTML = ''; q = (q || '').toLowerCase();
+          d.params.forEach(function (p) {
+            if (q && p.name.toLowerCase().indexOf(q) < 0 && String(p.value).toLowerCase().indexOf(q) < 0) return;
+            var tr = document.createElement('tr');
+            var td1 = document.createElement('td'); td1.textContent = p.name;
+            var td2 = document.createElement('td');
+            if (p.writable) { var inp = document.createElement('input'); inp.value = p.value; inp.addEventListener('change', function () { setParam(p.name, inp.value) }); td2.append(inp) }
+            else { var sp = document.createElement('span'); sp.className = 'ro'; sp.textContent = p.value; td2.append(sp) }
+            tr.append(td1, td2); table.append(tr);
+          });
+        }
+        search.addEventListener('input', function () { renderRows(search.value) });
+        renderRows('');
+        panel.append(h, sm, actions, search, table);
       });
     }
     function setParam(path, value) { if (selected) act('/api/devices/' + enc(selected) + '/params', 'POST', { path: path, value: value }) }
@@ -267,18 +463,39 @@
       act('/api/groups', 'POST', body);
     });
 
-    function feed(type, line) {
-      var f = $('#feed'); var div = document.createElement('div'); div.className = 'ev';
-      var t = document.createElement('span'); t.className = 't'; t.textContent = type;
-      div.append(t, ' ' + line); f.append(div); f.scrollTop = f.scrollHeight;
-      while (f.childElementCount > 300) f.removeChild(f.firstChild);
+    var evCount = 0;
+    function feed(type, line, fail) {
+      var body = $('#feedbody'); var div = document.createElement('div'); div.className = 'ev';
+      var t = document.createElement('span'); t.className = 't' + (fail ? ' f' : ''); t.textContent = type;
+      div.append(t, ' ' + line);
+      var q = $('#logsearch').value.toLowerCase();
+      if (q && (type + ' ' + line).toLowerCase().indexOf(q) < 0) div.className += ' hide';
+      body.append(div); body.scrollTop = body.scrollHeight;
+      while (body.childElementCount > 300) body.removeChild(body.firstChild);
+      evCount++; $('#evcount').textContent = evCount;
     }
+    $('#logsearch').addEventListener('input', function () {
+      var q = this.value.toLowerCase();
+      document.querySelectorAll('#feedbody .ev').forEach(function (e) { e.classList.toggle('hide', !!q && e.textContent.toLowerCase().indexOf(q) < 0) });
+    });
+    $('#logclear').addEventListener('click', function () { $('#feedbody').innerHTML = ''; evCount = 0; $('#evcount').textContent = '0' });
+
+    var fleetTimer = null;
+    function scheduleFleetRefresh() { if (fleetTimer) return; fleetTimer = setTimeout(function () { fleetTimer = null; loadFleet() }, 1500) }
+
     function connect() {
       var ws = new WebSocket((location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/api/events');
       ws.onopen = function () { $('#status').className = 'dot on'; $('#statustext').textContent = 'live' };
       ws.onclose = function () { $('#status').className = 'dot'; $('#statustext').textContent = 'disconnected'; setTimeout(connect, 1500) };
       ws.onmessage = function (e) {
         var m = JSON.parse(e.data);
+        if (m.type === 'device:rpc') {
+          var line = m.dir === 'recv' ? 'Received: ' + m.method : m.dir === 'sent' ? 'Sent: ' + m.method : 'Failed: ' + (m.detail || m.method);
+          feed(m.serial, line, m.dir === 'fail');
+          scheduleFleetRefresh();
+          return;
+        }
+        if (m.type === 'device:inform') { lastInform[m.serial] = Date.now(); tick(); scheduleFleetRefresh(); }
         var extra = [m.event, m.phase, m.diagnostic].filter(Boolean).join(' ');
         feed(m.type, m.serial + (extra ? ' ' + extra : ''));
         if (m.type === 'device:add' || m.type === 'device:remove') loadFleet();

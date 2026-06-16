@@ -13,6 +13,10 @@ _Check the box and set 🟢 when a plan ships. Keep these in sync with `../index
   HTTP server (`dashboard.ts`): REST control mapped onto fleet/04's API + a hand-rolled WebSocket
   live feed of the `device:*` bus + one self-contained HTML page. `--dashboard` / `--dashboard-port`.
   _(Shipped — P1 REST, P2 WS feed, P3 UI/CLI; zero deps.)_
+- [x] 🟢 **02** — [Metrics & observability](./02-metrics-observability.md) · Priority: Medium — per-device + global
+  counters (per-RPC received, failures, informs), last recv/sent RPC, pending + recent tasks, last-inform age;
+  device summary panel, param search, searchable/clearable/counted log; lib-tracked `_stats` + `device:rpc` event,
+  simulator `_stats` (lifetime, event-time). _(Shipped — P1 lib/API, P2 UI panels/sidebar/global, P3 searches/log; zero deps.)_
 
 ## Direction
 

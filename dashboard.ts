@@ -48,11 +48,22 @@ function snapshot(client: CWMPSimulator) {
       count: g.devices.length,
       devices: g.devices.map((d) => d._serialNumber),
     })),
-    devices: client._devices.map((d) => ({
-      serial: d._serialNumber,
-      root: d._rootName,
-      groupId: groupIdOf(client, d),
-    })),
+    devices: client._devices.map((d) => {
+      const st = d.getStats();
+      return {
+        serial: d._serialNumber,
+        root: d._rootName,
+        groupId: groupIdOf(client, d),
+        lastInform: st.lastInform,
+        informs: st.informs,
+        recv: Object.values(st.rpc).reduce((a, b) => a + b, 0),
+        sent: Object.values(st.sent).reduce((a, b) => a + b, 0),
+        failures: st.failures,
+        pending: st.pending,
+      };
+    }),
+    // Lifetime, cumulative — computed server-side (survives device removal).
+    global: client.globalStats(),
   };
 }
 
@@ -106,7 +117,12 @@ async function route(client: CWMPSimulator, req: IncomingMessage, res: ServerRes
     if (parts.length >= 3 && !device) return json(res, 404, { error: `no device '${serial}'` });
 
     if (method === "GET" && parts.length === 3 && device) {
-      return json(res, 200, { serial, root: device._rootName, params: device.getLeaves(device._rootName) });
+      return json(res, 200, {
+        serial,
+        root: device._rootName,
+        params: device.getLeaves(device._rootName),
+        stats: device.getStats(),
+      });
     }
     if (method === "DELETE" && parts.length === 3 && device) {
       client.removeDevice(device);
@@ -147,6 +163,7 @@ function wireFeed(client: CWMPSimulator, send: Broadcast): void {
   client.on("device:diagnostic", (d: CWMPDevice, diag: string, phase: string) => send({ type: "device:diagnostic", serial: s(d), diagnostic: diag, phase }));
   client.on("device:save", (d: CWMPDevice) => send({ type: "device:save", serial: s(d) }));
   client.on("device:load", (d: CWMPDevice) => send({ type: "device:load", serial: s(d) }));
+  client.on("device:rpc", (d: CWMPDevice, info: Record<string, unknown>) => send({ type: "device:rpc", serial: s(d), ...info }));
 }
 
 /** Completes the WebSocket handshake for `/api/events` and tracks the socket. */

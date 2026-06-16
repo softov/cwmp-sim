@@ -15,9 +15,14 @@ import methods from "./cwmp-methods.ts";
 import soap from "./cwmp-soap.ts";
 import xmlParser from "./xml-parser.ts";
 import { applyTemplate } from "./config/template.ts";
-import type { SavedState } from "./types.ts";
+import type { SavedState, DeviceStats, RpcEvent } from "./types.ts";
 import { EventEmitter } from "node:events";
 import * as crypto from "node:crypto";
+
+/** A zero-valued stats object (used per-device and for the simulator's global). */
+export function newDeviceStats(): DeviceStats {
+  return { rpc: {}, sent: {}, informs: 0, failures: 0, lastRecv: null, lastSent: null, lastInform: null, tasks: [] };
+}
 
 /**
  * Derives a device's Connection Request URL path segment from its serial.
@@ -59,6 +64,8 @@ export default class CWMPDevice {
   _dirty = false;
   /** Lifecycle event bus (`save` / `load`); the simulator forwards these as `device:*`. */
   _events = new EventEmitter();
+  /** Runtime counters (per-device). In-memory; not persisted with state. */
+  _stats: DeviceStats = newDeviceStats();
   listeners: Map<string, Set<Function>>;
   _pendingReboot = false;
   _pendingFactoryReset = false;
@@ -87,7 +94,7 @@ export default class CWMPDevice {
   _httpClient: CwmpHttp | null = null;
   _requestId: string | null = null;
   _periodicInformTimeout: any = null;
-  _periodicInformInterval = 30000;
+  _periodicInformInterval = 300000;
   _periodicInformDisabled = false;
   _diag: {
     ping: DiagPing;
@@ -354,6 +361,46 @@ export default class CWMPDevice {
     return state;
   }
 
+  // --- Telemetry (in-memory counters; the simulator accumulates a global) ---
+
+  /**
+   * Records an RPC the device received or sent, updates the counters + last-RPC,
+   * and emits `rpc` (the simulator forwards it as `device:rpc` and bumps the
+   * fleet-wide totals).
+   */
+  _recordRpc(method: string, dir: "recv" | "sent"): void {
+    const at = Date.now();
+    if (dir === "recv") {
+      this._stats.rpc[method] = (this._stats.rpc[method] ?? 0) + 1;
+      this._stats.lastRecv = { method, at };
+    } else {
+      this._stats.sent[method] = (this._stats.sent[method] ?? 0) + 1;
+      this._stats.lastSent = { method, at };
+    }
+    this._events.emit("rpc", this, { method, dir, ok: true } as RpcEvent);
+  }
+
+  /** Records a write failure (e.g. a rejected SetParameterValues) for `path`. */
+  recordFault(path: string): void {
+    this._stats.failures++;
+    this._events.emit("rpc", this, { method: "SetParameterValues", dir: "fail", ok: false, detail: path } as RpcEvent);
+  }
+
+  /** A serializable snapshot of this device's stats (+ live `pending`). */
+  getStats(): DeviceStats {
+    return {
+      rpc: { ...this._stats.rpc },
+      sent: { ...this._stats.sent },
+      informs: this._stats.informs,
+      failures: this._stats.failures,
+      lastRecv: this._stats.lastRecv,
+      lastSent: this._stats.lastSent,
+      lastInform: this._stats.lastInform,
+      pending: this._pendingTask.length,
+      tasks: [...this._stats.tasks],
+    };
+  }
+
   // --- CWMP session (outbound: the CPE talks to the ACS) ---
 
   /**
@@ -411,6 +458,9 @@ export default class CWMPDevice {
     this._log.info(`[${sn}] Starting session with event: ${event}`);
 
     // Lifecycle signals for the fleet bus: a session begins with an Inform.
+    this._stats.informs++;
+    this._stats.lastInform = Date.now();
+    this._recordRpc("Inform", "sent");
     this._events.emit("session-start", this, event);
     this._events.emit("inform", this, event);
 
@@ -506,6 +556,7 @@ export default class CWMPDevice {
     let methodName = requestElement.localName;
     const method = methods[methodName];
     this._log.info(`Received: ${methodName}`);
+    this._recordRpc(methodName, "recv");
 
     if (!method) {
       this._log.warn(`Method ${methodName} not supported.`);
@@ -514,6 +565,7 @@ export default class CWMPDevice {
       return this.handleMethod(responseXml);
     }
     let responseBody = method(this, requestElement);
+    this._recordRpc(`${methodName}Response`, "sent");
     requestXml = soap.createSoapDocument(this._requestId, responseBody);
     responseXml = await this.sendRequest(requestXml);
     await this.handleMethod(responseXml);
@@ -534,6 +586,8 @@ export default class CWMPDevice {
    */
   finishTask(task: CWMPTask) {
     if (!task) return;
+    this._stats.tasks.push({ type: task._type, at: Date.now() });
+    if (this._stats.tasks.length > 20) this._stats.tasks.shift();
     this._events.emit("diagnostic", this, task._type, "end");
     task._isRequested = false;
     task._isRunning = false;

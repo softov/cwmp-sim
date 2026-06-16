@@ -24,6 +24,9 @@ test("GET / serves the self-contained dashboard page", async () => {
     const html = await r.text();
     assert.match(html, /cwmp-sim dashboard/);
     assert.match(html, /id="fleet"/); // the app shell
+    assert.match(html, /id="logsearch"/); // log search
+    assert.match(html, /id="logclear"/); // log clear
+    assert.match(html, /id="evcount"/); // event counter
     assert.match(html, /\/api\/events/); // the WS feed wiring
     assert.doesNotMatch(html, /https?:\/\/cdn|src=/); // no external assets/deps
   } finally {
@@ -42,6 +45,35 @@ test("GET /api/fleet returns groups and devices", async () => {
     assert.equal(body.groups.length, 1);
     assert.equal(body.groups[0].count, 2);
     assert.equal(body.devices[0].groupId, body.groups[0].id);
+  } finally {
+    await dash.close();
+  }
+});
+
+test("GET /api/devices/:serial includes stats", async () => {
+  const sim = makeSim(1);
+  sim._devices[0]._recordRpc("GetParameterValues", "recv");
+  const dash = await startDashboard(sim, { port: 0 });
+  try {
+    const body: any = await (await fetch(dash.url + "api/devices/SIM-0")).json();
+    assert.ok(body.stats);
+    assert.equal(body.stats.rpc.GetParameterValues, 1);
+    assert.equal(body.stats.pending, 0);
+  } finally {
+    await dash.close();
+  }
+});
+
+test("GET /api/fleet includes the global stats + per-device summary", async () => {
+  const sim = makeSim(2);
+  sim._devices[0]._recordRpc("SetParameterValues", "recv");
+  const dash = await startDashboard(sim, { port: 0 });
+  try {
+    const body: any = await (await fetch(dash.url + "api/fleet")).json();
+    assert.ok(body.global);
+    assert.equal(body.global.rpc.SetParameterValues, 1);
+    assert.equal(typeof body.devices[0].informs, "number");
+    assert.equal(typeof body.devices[0].recv, "number");
   } finally {
     await dash.close();
   }
