@@ -1,5 +1,6 @@
 import type { CwmpSimulatorOptions } from "../types.ts";
 import { configFields } from "./fields.ts";
+import { applyTemplate } from "./template.ts";
 
 function setPath(target: Record<string, any>, path: string, value: unknown): void {
   const parts = path.split(".");
@@ -63,6 +64,13 @@ export function buildOptions(
     const value = raw !== undefined ? (field.parse ? field.parse(raw) : raw) : field.default;
 
     setPath(options, field.path, value);
+  }
+
+  // Resolve {i} templates in the identity fields against device.index.
+  const dev = (options.device ??= {}) as Record<string, any>;
+  const idx = typeof dev.index === "number" ? dev.index : 0;
+  for (const key of ["serialNumber", "oui", "mac"]) {
+    if (typeof dev[key] === "string") dev[key] = applyTemplate(dev[key], idx);
   }
 
   return options as CwmpSimulatorOptions;

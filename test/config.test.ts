@@ -22,3 +22,16 @@ test("buildOptions defaults log.level to info and parses overrides", () => {
 test("buildOptions rejects an invalid log level", () => {
   assert.throws(() => buildOptions({}, ["--log-level", "loud"]), /Invalid log level/);
 });
+
+test("buildOptions resolves identity templates with device.index", () => {
+  const o = buildOptions({}, ["--serial", "SIM-{i}", "--mac", "AA:{i:02}", "--index", "7"]);
+  assert.equal(o.device.serialNumber, "SIM-7");
+  assert.equal(o.device.mac, "AA:07");
+  assert.equal(o.device.index, 7);
+});
+
+test("buildOptions defaults device.index to 0 (templates resolve without --index)", () => {
+  const o = buildOptions({}, ["--serial", "dev-{i:03}"]);
+  assert.equal(o.device.index, 0);
+  assert.equal(o.device.serialNumber, "dev-000");
+});

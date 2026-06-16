@@ -103,6 +103,22 @@ export const configFields: ConfigField<unknown>[] = [
     default: "./models/data_model_test.json",
     parse: asString
   },
+  {
+    path: "device.index",
+    env: "DEVICE_INDEX",
+    flag: "--index",
+    label: "Device index (resolves {i} in serial/oui/mac templates)",
+    default: 0,
+    parse: asInt
+  },
+  {
+    path: "device.mac",
+    env: "DEVICE_MAC",
+    flag: "--mac",
+    label: "Device MAC address (templatable; injected into the data model)",
+    default: "",
+    parse: asString
+  },
 
   {
     path: "acs.url",

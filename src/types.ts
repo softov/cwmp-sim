@@ -48,6 +48,8 @@ export type CwmpDeviceOptions = {
   serialNumber?: string;
   csvPath?: string;
   jsonPath?: string;
+  mac?: string;
+  index?: number;
   logger?: Logger;
 };
 

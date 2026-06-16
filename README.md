@@ -369,8 +369,10 @@ Configuration can be provided through environment variables (see `.env.example`)
 | `CONN_USER` | Connection Request username | empty |
 | `CONN_PASS` | Connection Request password | empty |
 | `DEVICE_ROOT` | Root model name: `Device` or `InternetGatewayDevice` | `Device` |
-| `DEVICE_SERIAL` | Device serial number | `123456` |
-| `DEVICE_OUI` | Device OUI | `000000` |
+| `DEVICE_SERIAL` | Device serial number (supports `{i}` templating) | `123456` |
+| `DEVICE_OUI` | Device OUI (supports `{i}` templating) | `000000` |
+| `DEVICE_MAC` | Device MAC address (supports `{i}` templating; injected into the model) | empty |
+| `DEVICE_INDEX` | Device index used to resolve `{i}` in identity fields | `0` |
 | `DEVICE_PRODUCT_CLASS` | Product class | `Simulator` |
 | `DEVICE_CSV` | CSV path used by the current placeholder export hook | `./models/data_model_test.csv` |
 | `DEVICE_JSON` | Optional JSON data-model fixture overlaid on the default tree (skipped if missing) | `./models/data_model_tests.json` |
@@ -388,7 +390,30 @@ Supported CLI flags:
 - `--ip <address>`
 - `--port <port>`
 - `--serial <serial>`
+- `--mac <mac>`
+- `--index <n>`
 - `--log-level <level>`
+
+### Templated identities
+
+`--serial`, `--oui`, and `--mac` accept a `{i}` token that resolves against `--index` (default `0`).
+This makes each simulated device's identity derivable from an index — groundwork for running a fleet.
+
+| Token | Example (`--index 7`) | Result |
+| --- | --- | --- |
+| `{i}` | `SIM-{i}` | `SIM-7` |
+| `{i:04}` | `SIM-{i:04}` | `SIM-0007` (decimal, zero-padded) |
+| `{i+100}` | `{i+100}` | `107` |
+| `{i+10:03}` | `dev-{i+10:03}` | `dev-017` |
+| `{i:02x}` | `C0:FF:EE:00:00:{i:02x}` | `C0:FF:EE:00:00:07` (hex byte) |
+| `{i:X}` | `{i:X}` | `7` (upper-case hex) |
+
+A MAC address is six hex bytes (`XX:XX:XX:XX:XX:XX`), so build it with hex tokens — a bare `{i:15}`
+produces a 15-digit decimal string, **not** a MAC:
+
+```bash
+npm run dev -- --serial "SIM-{i:08}" --mac "C0:FF:EE:00:00:{i:02x}" --index 7
+```
 
 ## Logging
 

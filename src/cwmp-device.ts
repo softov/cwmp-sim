@@ -66,6 +66,7 @@ export default class CWMPDevice {
   _csvPath: string | null = null;
   _jsonPath: string | null = null;
   _log: Logger = NULL_LOGGER;
+  _mac: string = "";
   _rootName: string = "Device";
   _rootTree: any;
   _keepEvents = false;
@@ -112,6 +113,7 @@ export default class CWMPDevice {
     if (options.csvPath != undefined) this._csvPath = options.csvPath;
     if (options.jsonPath != undefined) this._jsonPath = options.jsonPath;
     if (options.logger) this._log = options.logger;
+    if (options.mac) this._mac = options.mac;
 
     this._manufacturer = options.manufacturer || "BrByte";
     this._rootName = options.rootName || "Device"; // Default to TR-098 as per user hint
@@ -169,6 +171,23 @@ export default class CWMPDevice {
       'upload': new DiagUpload(this),
       'wifi': new DiagWifi(this),
     };
+
+    this.applyMac();
+  }
+
+  /**
+   * Injects the configured MAC address into the data model's MACAddress leaf,
+   * where one exists for the active root.
+   */
+  applyMac(): void {
+    if (!this._mac) return;
+    const macPaths = this._rootName === "InternetGatewayDevice"
+      ? ["InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANIPConnection.1.MACAddress"]
+      : ["Device.Ethernet.Interface.1.MACAddress"];
+    for (const path of macPaths) {
+      const node = this.findNode(path);
+      if (node && (node as any)._value !== undefined) this.set(path, this._mac, true);
+    }
   }
 
   /**
