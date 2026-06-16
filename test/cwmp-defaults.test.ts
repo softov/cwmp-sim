@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import cwmpModel from "../src/cwmp-model.ts";
+import cwmpModel from "../src/cwmp-defaults.ts";
 
 test("merge combines shallow keys from both sides", () => {
   assert.deepEqual(cwmpModel.merge({ a: 1, b: 2 }, { b: 3, c: 4 }), { a: 1, b: 3, c: 4 });

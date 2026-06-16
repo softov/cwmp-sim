@@ -164,3 +164,66 @@ test("getConnectionHash matches the serial's hash and is cached", () => {
   assert.equal(d.getConnectionHash(), hashConnectionPath("SIM-9"));
   assert.equal(d.getConnectionHash(), d.getConnectionHash()); // stable / cached
 });
+
+// --- Device templates (fleet/02 Phase 2) ---
+
+// A deliberately minimal template: DeviceInfo + one WLAN leaf, no
+// ManagementServer and no diagnostics — those must be injected from defaults.
+function partialTr181Model() {
+  return {
+    root: "Device",
+    tree: {
+      Device: {
+        _writable: false,
+        DeviceInfo: {
+          SerialNumber: { _value: "TPL-SERIAL", _type: "xsd:string", _writable: false },
+          ProductClass: { _value: "FromTemplate", _type: "xsd:string", _writable: false },
+        },
+        WiFi: {
+          Radio: { "1": { Channel: { _value: "11", _type: "xsd:unsignedInt", _writable: true } } },
+        },
+      },
+    },
+  };
+}
+
+test("a template becomes the device's base tree, its root inferred", () => {
+  const d = new CWMPDevice({ model: partialTr181Model(), serialNumber: "SIM-{i}", index: 1 });
+  assert.equal(d._rootName, "Device");
+  // template-only data survives
+  assert.equal(d.getValue("Device.WiFi.Radio.1.Channel"), "11");
+  assert.equal(d.getValue("Device.DeviceInfo.ProductClass"), "FromTemplate");
+});
+
+test("ensureRequiredNodes injects ManagementServer + diagnostics a template omits", () => {
+  const d = new CWMPDevice({ model: partialTr181Model(), serialNumber: "S1" });
+  // ManagementServer backfilled (a leaf the CR machinery relies on exists)
+  assert.ok(d.findNode("Device.ManagementServer.ConnectionRequestURL"));
+  // TR-181 diagnostics backfilled
+  assert.equal(d.getValue("Device.IP.Diagnostics.IPPing.DiagnosticsState"), "None");
+  assert.ok(d.findNode("Device.IP.Diagnostics.DownloadDiagnostics.DiagnosticsState"));
+});
+
+test("identity overlays the template's own DeviceInfo values", () => {
+  const d = new CWMPDevice({ model: partialTr181Model(), serialNumber: "SIM-{i}", oui: "00E0{i:02x}", index: 7 });
+  // template shipped TPL-SERIAL; the {i} identity wins
+  assert.equal(d.getValue("Device.DeviceInfo.SerialNumber"), "SIM-7");
+  assert.equal(d.getValue("Device.DeviceInfo.ManufacturerOUI"), "00E007");
+});
+
+test("a templated device still accepts ACS/CR config via configureManagementServer", () => {
+  const d = new CWMPDevice({ model: partialTr181Model(), serialNumber: "S1" });
+  d.configureManagementServer({ acsUrl: "http://acs/y", crUser: "cru", crPass: "crp" });
+  assert.equal(d.getValue("Device.ManagementServer.URL"), "http://acs/y");
+  assert.deepEqual(d.getCrCredentials(), { user: "cru", pass: "crp" });
+});
+
+test("a shared template object is not mutated across devices (deep-cloned)", () => {
+  const tpl = partialTr181Model();
+  const a = new CWMPDevice({ model: tpl, serialNumber: "A" });
+  const b = new CWMPDevice({ model: tpl, serialNumber: "B" });
+  assert.equal(a.getValue("Device.DeviceInfo.SerialNumber"), "A");
+  assert.equal(b.getValue("Device.DeviceInfo.SerialNumber"), "B");
+  // the source template object is untouched by either device's identity overlay
+  assert.equal(tpl.tree.Device.DeviceInfo.SerialNumber._value, "TPL-SERIAL");
+});

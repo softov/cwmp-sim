@@ -1,5 +1,8 @@
 import type { Logger, LogLevel, LoggerSink } from "./logger.ts";
 
+/** Parsed model: the inferred root key (`Device` / `InternetGatewayDevice`) + the tree. */
+export type LoadedModel = { root: string; tree: Record<string, any> };
+
 export type XmlNode = {
   name: string;
   namespace: string;
@@ -46,11 +49,13 @@ export type CwmpDeviceOptions = {
   oui?: string;
   productClass?: string;
   serialNumber?: string;
-  csvPath?: string;
-  jsonPath?: string;
   mac?: string;
   index?: number;
   logger?: Logger;
+  /** Name or path of a model to load (resolved by the config layer; `.csv`/`.json` path or a bare name under `modelsDir`). */
+  modelName?: string;
+  /** A pre-loaded device model (base parameter tree); set by the config layer. */
+  model?: LoadedModel;
 };
 
 export type CwmpLogOptions = {
@@ -64,11 +69,29 @@ export type CwmpLogOptions = {
   sink?: LoggerSink;
 };
 
+/**
+ * One device group in a fleet composition: a model (device type) replicated
+ * `count` times, with its own effective device options. Built from a
+ * `--model <name|path> …group flags…` segment on the CLI.
+ */
+export type FleetGroup = {
+  /** Number of devices in this group (default 1). */
+  count: number;
+  /** Full effective device options for the group (base defaults + group overrides). */
+  device: CwmpDeviceOptions;
+  /** Resolved model tree (set by the config layer); undefined → built-in default tree. */
+  model?: LoadedModel;
+};
+
 export type CwmpFleetOptions = {
-  /** Number of devices to simulate (default 1). */
+  /** Number of devices to simulate when no `groups` are given (default 1). */
   count?: number;
   /** Delay in ms between each device's boot, to stagger Informs (default 1000). */
   bootDelay?: number;
+  /** Directory to resolve model names from (default `./models`). */
+  modelsDir?: string;
+  /** Fleet composition: one entry per device group (mixed types). When set, supersedes `count`. */
+  groups?: FleetGroup[];
 };
 
 export type CwmpSimulatorOptions = {

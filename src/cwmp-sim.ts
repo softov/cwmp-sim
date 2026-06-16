@@ -3,20 +3,26 @@
 import CWMPDevice from "./cwmp-device.ts";
 import CWMPConn from "./cwmp-conn.ts";
 import type { ConnectionRequest } from "./cwmp-conn.ts";
-import type { CwmpSimulatorOptions } from "./types.ts";
+import type { CwmpSimulatorOptions, FleetGroup } from "./types.ts";
 import { createLogger, NULL_LOGGER, type Logger } from "./logger.ts";
 
 /**
  * Orchestrates a fleet of simulated CPEs: builds N self-running devices and
  * fronts them with a single shared Connection Request server that routes by URL
  * path (`/{hash}`). Each device runs its own CWMP session with the ACS.
- * A single-device run is simply a fleet of one.
+ *
+ * The fleet is built from `fleet.groups` (mixed device types) — or a single
+ * implicit group from `fleet.count` — through one reusable seam, `addGroup()`,
+ * so a future runtime "add devices on demand" reuses the exact same path.
  */
 export default class CWMPSimulator {
   _devices: CWMPDevice[] = [];
   _connectRequestServer: CWMPConn | null = null;
+  _connection: ConnectionRequest | null = null;
   _options: CwmpSimulatorOptions;
   _log: Logger = NULL_LOGGER;
+  /** Running identity index, incremented across every device of every group. */
+  _nextIndex = 0;
 
   /** Back-compat accessor: the first device (single-device callers / CLI SIGINT). */
   get _device(): CWMPDevice {
@@ -24,8 +30,8 @@ export default class CWMPSimulator {
   }
 
   /**
-   * Creates a fleet of `fleet.count` devices (default 1), each with an
-   * index-derived identity, configured against the ACS.
+   * Builds the fleet from `fleet.groups` (or a single implicit group derived
+   * from `fleet.count`), each device configured against the ACS.
    * @param {object} options - Configuration options.
    */
   constructor(options: CwmpSimulatorOptions) {
@@ -36,20 +42,66 @@ export default class CWMPSimulator {
     this._log = options.log?.logger
       ?? createLogger({ level: options.log?.level, prefix: options.log?.prefix, sink: options.log?.sink });
 
-    const count = Math.max(1, options.fleet?.count ?? 1);
-    const baseIndex = options.device.index ?? 0;
+    this._nextIndex = options.device?.index ?? 0;
+
+    const groups: FleetGroup[] = options.fleet?.groups?.length
+      ? options.fleet.groups
+      : [{ count: Math.max(1, options.fleet?.count ?? 1), device: options.device, model: options.device?.model }];
+
+    for (const group of groups) this.addGroup(group);
+  }
+
+  /**
+   * Builds (and, if the fleet is already running, registers + boots) the devices
+   * for one group. Each device gets a unique fleet index and the ACS/CR config.
+   * This is the single seam shared by construction-time composition and any
+   * future runtime "add devices" call.
+   * @returns the devices created for this group.
+   */
+  addGroup(group: FleetGroup): CWMPDevice[] {
+    const count = Math.max(1, group.count ?? 1);
+    const made: CWMPDevice[] = [];
 
     for (let i = 0; i < count; i++) {
-      const device = new CWMPDevice({ ...options.device, index: baseIndex + i, logger: this._log });
+      const device = new CWMPDevice({
+        ...group.device,
+        model: group.model ?? group.device?.model,
+        index: this._nextIndex++,
+        logger: this._log,
+      });
       device.configureManagementServer({
-        acsUrl: options.acs.url,
-        acsUser: options.acs.user,
-        acsPass: options.acs.pass,
-        crUser: options.conn.user,
-        crPass: options.conn.pass,
+        acsUrl: this._options.acs.url,
+        acsUser: this._options.acs.user,
+        acsPass: this._options.acs.pass,
+        crUser: this._options.conn.user,
+        crPass: this._options.conn.pass,
       });
       this._devices.push(device);
+      made.push(device);
+
+      // Already listening (runtime add) → register + boot immediately.
+      if (this._connection) this._registerAndBoot(device, 0);
     }
+
+    return made;
+  }
+
+  /**
+   * Registers a device's CR route on the shared server and boots its session
+   * after `delayMs`. Requires the CR server to be listening.
+   */
+  _registerAndBoot(device: CWMPDevice, delayMs: number): void {
+    const server = this._connectRequestServer;
+    const connection = this._connection;
+    if (!server || !connection) return;
+
+    const hash = device.getConnectionHash();
+    server.register(hash, {
+      credentials: () => device.getCrCredentials(),
+      onRequest: () => device.onConnectionRequest(),
+    });
+    device.setConnectionRequestURL(`${connection.url}${hash}`);
+    setTimeout(() => device.start(), delayMs);
   }
 
   /**
@@ -70,15 +122,8 @@ export default class CWMPSimulator {
     this._connectRequestServer = server;
 
     server.listenHTTP().then((connection: ConnectionRequest) => {
-      this._devices.forEach((device, i) => {
-        const hash = device.getConnectionHash();
-        server.register(hash, {
-          credentials: () => device.getCrCredentials(),
-          onRequest: () => device.onConnectionRequest(),
-        });
-        device.setConnectionRequestURL(`${connection.url}${hash}`);
-        setTimeout(() => device.start(), i * delay);
-      });
+      this._connection = connection;
+      this._devices.forEach((device, i) => this._registerAndBoot(device, i * delay));
     }).catch((err: Error) => {
       this._log.error(`Failed to start connection server: ${err.message}`);
     });

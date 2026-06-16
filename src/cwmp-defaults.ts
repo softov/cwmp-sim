@@ -256,7 +256,7 @@ const uploadDiagnosticsParams = {
   'TCPOpenResponseTime': { _value: '0001-01-01T00:00:00Z', _type: 'xsd:dateTime', _writable: false },
 };
 
-const cwmp_model = {
+const cwmp_defaults = {
   merge,
   toInternalModel,
   portMappingDefaultParams,
@@ -278,4 +278,4 @@ const cwmp_model = {
   uploadDiagnosticsParams
 };
 
-export default cwmp_model;
+export default cwmp_defaults;

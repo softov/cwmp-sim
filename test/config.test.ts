@@ -35,3 +35,36 @@ test("buildOptions parses fleet count and boot delay", () => {
   assert.equal(buildOptions({}, ["--count", "5"]).fleet?.count, 5);
   assert.equal(buildOptions({ FLEET_BOOT_DELAY: "250" }, []).fleet?.bootDelay, 250);
 });
+
+test("buildOptions always emits at least one fleet group", () => {
+  const o = buildOptions({}, []);
+  assert.equal(o.fleet?.groups?.length, 1);
+  assert.equal(o.fleet?.groups?.[0].count, 1);
+});
+
+test("grouped flags bind group-scoped flags to their --model; globals stay global", () => {
+  const o = buildOptions({}, [
+    "--port", "9000",
+    "--model", "huawei", "--count", "5",
+    "--model", "zte", "--count", "10",
+  ]);
+  // global flag is fleet-wide regardless of position
+  assert.equal(o.conn.port, 9000);
+  // two groups, each with its own template + count
+  assert.equal(o.fleet?.groups?.length, 2);
+  assert.equal(o.fleet?.groups?.[0].device.modelName, "huawei");
+  assert.equal(o.fleet?.groups?.[0].count, 5);
+  assert.equal(o.fleet?.groups?.[1].device.modelName, "zte");
+  assert.equal(o.fleet?.groups?.[1].count, 10);
+});
+
+test("a group-scoped flag before the first --model seeds the base for every group", () => {
+  const o = buildOptions({}, [
+    "--serial", "BASE-{i}",
+    "--model", "huawei", "--count", "1",
+    "--model", "zte", "--serial", "ZTE-{i}", "--count", "1",
+  ]);
+  // group 1 inherits the base serial pattern; group 2 overrides it
+  assert.equal(o.fleet?.groups?.[0].device.serialNumber, "BASE-{i}");
+  assert.equal(o.fleet?.groups?.[1].device.serialNumber, "ZTE-{i}");
+});

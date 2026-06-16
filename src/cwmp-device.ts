@@ -1,7 +1,6 @@
 "use strict";
 
-import models from "./cwmp-model.ts";
-import fs from "node:fs/promises";
+import defaults from "./cwmp-defaults.ts";
 import type { CwmpNode, CwmpDeviceOptions } from "./types.ts";
 import DiagPing from "./diag-ping.ts";
 import DiagTraceroute from "./diag-traceroute.ts";
@@ -16,7 +15,6 @@ import methods from "./cwmp-methods.ts";
 import soap from "./cwmp-soap.ts";
 import xmlParser from "./xml-parser.ts";
 import { applyTemplate } from "./config/template.ts";
-import { convertObjectToCwmp } from "./template/json.ts";
 import * as crypto from "node:crypto";
 
 /**
@@ -37,8 +35,6 @@ export default class CWMPDevice {
   _oui = "FFFFFF";
   _productClass = "Simulator";
   _serialNumber = "123456";
-  _csvPath: string | null = null;
-  _jsonPath: string | null = null;
   _log: Logger = NULL_LOGGER;
   _mac: string = "";
   _connHash: string | null = null;
@@ -91,8 +87,6 @@ export default class CWMPDevice {
    * @param {string} productClass - Device product class.
    */
   constructor(options: CwmpDeviceOptions) {
-    if (options.csvPath != undefined) this._csvPath = options.csvPath;
-    if (options.jsonPath != undefined) this._jsonPath = options.jsonPath;
     if (options.logger) this._log = options.logger;
 
     // Resolve {i} identity templates against this device's own index.
@@ -105,9 +99,13 @@ export default class CWMPDevice {
     this._productClass = options.productClass || "Simulator";
     this._serialNumber = applyTemplate(options.serialNumber || "123456", idx);
 
-    // Determine structures based on Root Type
-    // Determine structures based on Root Type
-    if (this._rootName === "InternetGatewayDevice") {
+    // Base parameter tree. A provided model wins — its top-level key sets the
+    // root (TR-098 vs TR-181); we deep-clone so a model shared across a fleet
+    // is never mutated. Otherwise build the matching built-in default.
+    if (options.model) {
+      this._rootName = options.model.root;
+      this._rootTree = defaults.merge({}, options.model.tree);
+    } else if (this._rootName === "InternetGatewayDevice") {
       this._rootTree = this.defaultTR98();
     } else {
       this._rootTree = this.defaultTR181();
@@ -123,30 +121,9 @@ export default class CWMPDevice {
       this._log
     );
 
-    const loadJSON = async () => {
-      // Load an optional JSON data-model fixture to overlay on the default tree.
-      const jsonFile = this._jsonPath;
-      if (!jsonFile) return;
-      try {
-        const data = await fs.readFile(jsonFile);
-        if (!data) return;
-        const model = JSON.parse(data.toString());
-        if (!model) return;
-        if (!model[this._rootName]) return;
-        // this._rootTree[this._rootName] = models.merge(this._rootTree[this._rootName], );
-        this._rootTree[this._rootName] = convertObjectToCwmp(model[this._rootName], {
-          defaultWritable: true
-          // writableKeys: new Set(['DiagnosticsState', 'DownloadURL', 'UploadURL', 'TestFileLength'])
-        });
-      } catch (e: any) {
-        if (e?.code === "ENOENT") {
-          this._log.debug(`JSON model file not found, using defaults: ${jsonFile}`);
-        } else {
-          this._log.warn(`Error loading JSON file '${jsonFile}': ${e}`);
-        }
-      }
-    };
-    loadJSON();
+    // A model carries only the device-specific tree; backfill the nodes the
+    // simulator's machinery depends on (ManagementServer + diagnostics).
+    if (options.model) this.ensureRequiredNodes();
 
     // Internal State Flags
     this._pendingReboot = false;
@@ -163,7 +140,58 @@ export default class CWMPDevice {
       wifi: new DiagWifi(this)
     };
 
+    // Identity overlay runs for BOTH the default and model bases: it stamps
+    // this device's resolved {i} serial/OUI onto DeviceInfo, overriding whatever
+    // placeholder a model shipped.
+    this.applyIdentity();
     this.applyMac();
+  }
+
+  /**
+   * Overlays this device's per-unit identity onto DeviceInfo: SerialNumber and
+   * ManufacturerOUI (the `{i}`-stamped values). Runs for both the built-in
+   * defaults and a loaded model, force-set so it wins over a model's own
+   * (placeholder) serial/OUI. Manufacturer and ProductClass are *model* identity
+   * — they stay with the model / defaults, not overlaid here.
+   */
+  applyIdentity(): void {
+    const di = `${this._rootName}.DeviceInfo`;
+    this.set(`${di}.ManufacturerOUI`, this._oui, true);
+    this.set(`${di}.SerialNumber`, this._serialNumber, true);
+  }
+
+  /**
+   * Backfills the nodes the simulator depends on but a model may omit:
+   * `${root}.ManagementServer` and the diagnostics subtrees. Missing nodes are
+   * copied from the matching built-in default; nodes the model already
+   * provides are left untouched (the model is dominant).
+   */
+  ensureRequiredNodes(): void {
+    const root = this._rootName;
+    const defaults: any = root === "InternetGatewayDevice" ? this.defaultTR98() : this.defaultTR181();
+    const defRoot = defaults[root];
+    const myRoot = this._rootTree[root];
+    if (!myRoot || !defRoot) return;
+
+    if (myRoot.ManagementServer === undefined) myRoot.ManagementServer = defRoot.ManagementServer;
+
+    if (root === "InternetGatewayDevice") {
+      // TR-098: diagnostics sit directly under the root.
+      for (const k of ["IPPingDiagnostics", "TraceRouteDiagnostics", "DownloadDiagnostics", "UploadDiagnostics"]) {
+        if (myRoot[k] === undefined) myRoot[k] = defRoot[k];
+      }
+    } else {
+      // TR-181: diagnostics live under Device.IP.Diagnostics.
+      if (myRoot.IP === undefined) {
+        myRoot.IP = defRoot.IP;
+      } else if (myRoot.IP.Diagnostics === undefined) {
+        myRoot.IP.Diagnostics = defRoot.IP.Diagnostics;
+      } else {
+        for (const k of ["IPPing", "TraceRoute", "DownloadDiagnostics", "UploadDiagnostics"]) {
+          if (myRoot.IP.Diagnostics[k] === undefined) myRoot.IP.Diagnostics[k] = defRoot.IP.Diagnostics[k];
+        }
+      }
+    }
   }
 
   /**
@@ -630,13 +658,15 @@ export default class CWMPDevice {
     const root = {
       InternetGatewayDevice: {
         _writable: false,
-        DeviceInfo: models.merge(models.commonDeviceInfoParams, {
+        // Manufacturer/ProductClass are model identity (from options here).
+        // SerialNumber + ManufacturerOUI are per-unit identity, stamped post-build
+        // by applyIdentity() — declared structurally with placeholder values.
+        DeviceInfo: defaults.merge(defaults.commonDeviceInfoParams, {
           Manufacturer: { _value: this._manufacturer, _type: "xsd:string", _writable: false },
-          ManufacturerOUI: { _value: this._oui, _type: "xsd:string", _writable: false },
-          ProductClass: { _value: this._productClass, _type: "xsd:string", _writable: false },
-          SerialNumber: { _value: this._serialNumber, _type: "xsd:string", _writable: false }
+          ManufacturerOUI: { _value: "", _type: "xsd:string", _writable: false },
+          ProductClass: { _value: this._productClass, _type: "xsd:string", _writable: false }
         }),
-        ManagementServer: models.merge(models.commonManagementServerParams, {
+        ManagementServer: defaults.merge(defaults.commonManagementServerParams, {
           _writable: false,
           Username: { _value: "", _type: "xsd:string", _writable: true },
           Password: { _value: "", _type: "xsd:string", _writable: true },
@@ -644,10 +674,10 @@ export default class CWMPDevice {
           ConnectionRequestPassword: { _value: "", _type: "xsd:string", _writable: true },
           ConnectionRequestURL: { _value: "", _type: "xsd:string", _writable: false }
         }),
-        IPPingDiagnostics: models.merge(models.ipPingDiagnosticsParams, {}),
-        TraceRouteDiagnostics: models.merge(models.traceRouteDiagnosticsParams, {}),
-        DownloadDiagnostics: models.merge(models.downloadDiagnosticsParams, {}),
-        UploadDiagnostics: models.merge(models.uploadDiagnosticsParams, {}),
+        IPPingDiagnostics: defaults.merge(defaults.ipPingDiagnosticsParams, {}),
+        TraceRouteDiagnostics: defaults.merge(defaults.traceRouteDiagnosticsParams, {}),
+        DownloadDiagnostics: defaults.merge(defaults.downloadDiagnosticsParams, {}),
+        UploadDiagnostics: defaults.merge(defaults.uploadDiagnosticsParams, {}),
         WANDevice: {
           _writable: false,
           "1": {
@@ -658,7 +688,7 @@ export default class CWMPDevice {
                 _writable: false,
                 WANIPConnection: {
                   _writable: false,
-                  "1": models.merge(models.wanIPConnectionDeviceParams, {})
+                  "1": defaults.merge(defaults.wanIPConnectionDeviceParams, {})
                 }
               }
             }
@@ -669,7 +699,7 @@ export default class CWMPDevice {
           "1": {
             _writable: false,
             WLANConfiguration: {
-              "1": models.merge(models.wlanConfigurationParams, { _writable: false })
+              "1": defaults.merge(defaults.wlanConfigurationParams, { _writable: false })
             }
           }
         }
@@ -687,14 +717,16 @@ export default class CWMPDevice {
     const root = {
       Device: {
         _writable: false,
-        DeviceInfo: models.merge(models.commonDeviceInfoParams, {
+        // Manufacturer/ProductClass are model identity (from options here);
+        // SerialNumber + ManufacturerOUI are per-unit identity stamped post-build
+        // by applyIdentity() — declared structurally with placeholder values.
+        DeviceInfo: defaults.merge(defaults.commonDeviceInfoParams, {
           _writable: false,
           Manufacturer: { _value: this._manufacturer, _type: "xsd:string", _writable: false },
-          ManufacturerOUI: { _value: this._oui, _type: "xsd:string", _writable: false },
-          ProductClass: { _value: this._productClass, _type: "xsd:string", _writable: false },
-          SerialNumber: { _value: this._serialNumber, _type: "xsd:string", _writable: false }
+          ManufacturerOUI: { _value: "", _type: "xsd:string", _writable: false },
+          ProductClass: { _value: this._productClass, _type: "xsd:string", _writable: false }
         }),
-        ManagementServer: models.merge(models.commonManagementServerParams, {
+        ManagementServer: defaults.merge(defaults.commonManagementServerParams, {
           _writable: false,
           Username: { _value: "", _type: "xsd:string", _writable: true },
           Password: { _value: "", _type: "xsd:string", _writable: true },
@@ -706,10 +738,10 @@ export default class CWMPDevice {
           _writable: false,
           Diagnostics: {
             _writable: false,
-            IPPing: models.merge(models.ipPingDiagnosticsParams, {}),
-            TraceRoute: models.merge(models.traceRouteDiagnosticsParams, {}),
-            DownloadDiagnostics: models.merge(models.downloadDiagnosticsParams, {}),
-            UploadDiagnostics: models.merge(models.uploadDiagnosticsParams, {})
+            IPPing: defaults.merge(defaults.ipPingDiagnosticsParams, {}),
+            TraceRoute: defaults.merge(defaults.traceRouteDiagnosticsParams, {}),
+            DownloadDiagnostics: defaults.merge(defaults.downloadDiagnosticsParams, {}),
+            UploadDiagnostics: defaults.merge(defaults.uploadDiagnosticsParams, {})
           }
         },
         LANDevice: {
@@ -717,7 +749,7 @@ export default class CWMPDevice {
           1: {
             _writable: false,
             WLANConfiguration: {
-              "1": models.merge(models.wlanConfigurationParams, { _writable: false })
+              "1": defaults.merge(defaults.wlanConfigurationParams, { _writable: false })
             }
           }
         }
@@ -725,21 +757,5 @@ export default class CWMPDevice {
     };
 
     return root;
-  }
-
-  /**
-   * Generates structure from CSV (Placeholder/Proxy).
-   * @returns {object} Root object
-   */
-  defaultCSV(): object {
-    // For now, proxy to TR-098 or TR-181 based on type
-    if (this._rootName === "InternetGatewayDevice") {
-      return this.defaultTR98();
-    }
-    return this.defaultTR181();
-  }
-
-  exportCSV(path: string) {
-    this._log.info(`Mock exporting CSV to ${path}`);
   }
 }

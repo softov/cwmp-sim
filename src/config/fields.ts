@@ -1,12 +1,6 @@
-import type { CwmpSimulatorOptions } from "../types.ts";
 import { LOG_LEVELS, type LogLevel } from "../logger.ts";
 
-type ConfigSource = {
-  env: NodeJS.ProcessEnv;
-  argv: string[];
-};
-
-type ConfigField<T> = {
+export type ConfigField<T> = {
   path: string;
   env?: string;
   flag?: string;
@@ -15,6 +9,12 @@ type ConfigField<T> = {
   default: T;
   parse?: (value: string) => T;
   format?: (value: T) => string;
+  /**
+   * Where the flag applies in a grouped fleet. `"group"` flags bind to the
+   * current `--model` group (and seed the base before the first one);
+   * `"global"` flags (the default) apply fleet-wide regardless of position.
+   */
+  scope?: "global" | "group";
 };
 
 const asBool = (value: string): boolean => {
@@ -48,12 +48,22 @@ const asLogLevel = (value: string): LogLevel => {
 
 export const configFields: ConfigField<unknown>[] = [
   {
+    path: "device.modelName",
+    env: "DEVICE_MODEL",
+    flag: "--model",
+    label: "Model name or path (opens a device group); a .csv/.json path or a name under the models dir. Omit / 'default' = built-in tree",
+    default: "",
+    parse: asString,
+    scope: "group"
+  },
+  {
     path: "device.rootName",
     env: "DEVICE_ROOT",
     flag: "--device-root",
     label: "Device root name",
     default: "Device",
-    parse: asString
+    parse: asString,
+    scope: "group"
   },
   {
     path: "device.manufacturer",
@@ -61,7 +71,8 @@ export const configFields: ConfigField<unknown>[] = [
     flag: "--manufacturer",
     label: "Device manufacturer",
     default: "Simulator",
-    parse: asString
+    parse: asString,
+    scope: "group"
   },
   {
     path: "device.serialNumber",
@@ -69,7 +80,8 @@ export const configFields: ConfigField<unknown>[] = [
     flag: "--serial",
     label: "Device serial number",
     default: "123456",
-    parse: asString
+    parse: asString,
+    scope: "group"
   },
   {
     path: "device.oui",
@@ -77,7 +89,8 @@ export const configFields: ConfigField<unknown>[] = [
     flag: "--oui",
     label: "Device OUI",
     default: "000000",
-    parse: asString
+    parse: asString,
+    scope: "group"
   },
   {
     path: "device.productClass",
@@ -85,29 +98,14 @@ export const configFields: ConfigField<unknown>[] = [
     flag: "--product-class",
     label: "Device product class",
     default: "Simulator",
-    parse: asString
-  },
-  {
-    path: "device.csvPath",
-    env: "DEVICE_CSV",
-    flag: "--csv",
-    label: "Data model CSV path",
-    default: "./models/data_model_test.csv",
-    parse: asString
-  },
-  {
-    path: "device.jsonPath",
-    env: "DEVICE_JSON",
-    flag: "--json",
-    label: "Data model JSON path",
-    default: "./models/data_model_test.json",
-    parse: asString
+    parse: asString,
+    scope: "group"
   },
   {
     path: "device.index",
     env: "DEVICE_INDEX",
     flag: "--index",
-    label: "Device index (resolves {i} in serial/oui/mac templates)",
+    label: "Fleet base index (resolves {i} in serial/oui/mac; increments across all devices)",
     default: 0,
     parse: asInt
   },
@@ -117,7 +115,8 @@ export const configFields: ConfigField<unknown>[] = [
     flag: "--mac",
     label: "Device MAC address (templatable; injected into the data model)",
     default: "",
-    parse: asString
+    parse: asString,
+    scope: "group"
   },
 
   {
@@ -207,9 +206,10 @@ export const configFields: ConfigField<unknown>[] = [
     path: "fleet.count",
     env: "FLEET_COUNT",
     flag: "--count",
-    label: "Number of devices to simulate",
+    label: "Number of devices in the current group (per --model)",
     default: 1,
-    parse: asInt
+    parse: asInt,
+    scope: "group"
   },
   {
     path: "fleet.bootDelay",
@@ -218,5 +218,13 @@ export const configFields: ConfigField<unknown>[] = [
     label: "Delay (ms) between device boots",
     default: 1000,
     parse: asInt
+  },
+  {
+    path: "fleet.modelsDir",
+    env: "MODELS_DIR",
+    flag: "--models-dir",
+    label: "Directory to resolve model names from",
+    default: "./models",
+    parse: asString
   }
 ] satisfies ConfigField<unknown>[];

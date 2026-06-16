@@ -3,11 +3,11 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { parseCsv, toRows, rowsToTree } from "../src/template/csv.ts";
-import { jsonToTree } from "../src/template/json.ts";
-import { loadTemplate } from "../src/template/loader.ts";
+import { parseCsv, toRows, rowsToTree } from "../src/model/csv.ts";
+import { jsonToTree } from "../src/model/json.ts";
+import { loadModel } from "../src/model/loader.ts";
 
-const TEMPLATES_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "templates");
+const MODELS_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "models");
 
 // --- parseCsv (RFC 4180) ---
 
@@ -108,21 +108,21 @@ test("jsonToTree converts plain values into CWMP leaves and infers types", () =>
   assert.equal(tree.Device.WiFi.Radio["1"].Enable._type, "xsd:boolean");
 });
 
-// --- loadTemplate (shipped example files) ---
+// --- loadModel (shipped example files) ---
 
-test("loadTemplate loads the shipped CSV template by name", async () => {
-  const { root, tree } = await loadTemplate("generic-tr098", TEMPLATES_DIR);
+test("loadModel loads the shipped CSV model by name", async () => {
+  const { root, tree } = await loadModel("generic-tr098", MODELS_DIR);
   assert.equal(root, "InternetGatewayDevice");
   assert.equal(tree.InternetGatewayDevice.DeviceInfo.Manufacturer._value, "Generic");
   assert.equal(tree.InternetGatewayDevice.LANDevice["1"].WLANConfiguration["1"].SSID._writable, true);
 });
 
-test("loadTemplate loads the shipped JSON template by name", async () => {
-  const { root, tree } = await loadTemplate("generic-tr181", TEMPLATES_DIR);
+test("loadModel loads the shipped JSON model by name", async () => {
+  const { root, tree } = await loadModel("generic-tr181", MODELS_DIR);
   assert.equal(root, "Device");
   assert.equal(tree.Device.DeviceInfo.ProductClass._value, "GenericTR181");
 });
 
-test("loadTemplate throws a helpful error for an unknown template", async () => {
-  await assert.rejects(() => loadTemplate("does-not-exist", TEMPLATES_DIR), /Template not found/);
+test("loadModel throws a helpful error for an unknown model", async () => {
+  await assert.rejects(() => loadModel("does-not-exist", MODELS_DIR), /Model not found/);
 });

@@ -5,14 +5,21 @@ export function printHelp(): string {
 
   lines.push("Usage: cwmp-sim [options]");
   lines.push("");
+  lines.push("Fleet composition (grouped flags):");
+  lines.push("  Each --model <name|path> opens a device group; the [group] flags that");
+  lines.push("  follow bind to it until the next --model. Global flags apply fleet-wide.");
+  lines.push("  Omitting --model runs a single group (use --count for N).");
+  lines.push("    cwmp-sim --model huawei --count 5 --model zte --count 10 --interval 5000");
+  lines.push("");
   lines.push("Options:");
 
   for (const field of configFields) {
     const names = [field.flag, field.env ? `env:${field.env}` : undefined].filter(Boolean);
 
     const defaultValue = field.format != null ? field.format(field.default as never) : String(field.default);
+    const scopeTag = field.scope === "group" ? " [group]" : "";
 
-    lines.push(`  ${names.join(", ")}`);
+    lines.push(`  ${names.join(", ")}${scopeTag}`);
     lines.push(`      ${field.label}`);
     lines.push(`      Default: ${defaultValue}`);
 

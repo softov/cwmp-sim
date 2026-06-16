@@ -1,5 +1,7 @@
 "use strict";
 
+import type { LoadedModel } from "../types.ts";
+
 /**
  * Our own RFC 4180 CSV reader + a header-keyed row mapper + a row→tree builder.
  * Zero dependencies. Built so a real GenieACS device dump (12 columns) loads
@@ -10,9 +12,6 @@
  *   - Object=true  → a container node (intermediate; no value)
  *   - Object=false → a leaf { _value, _type, _writable }
  */
-
-/** Parsed template: the inferred root key (`Device` / `InternetGatewayDevice`) + the tree. */
-export type LoadedTemplate = { root: string; tree: Record<string, any> };
 
 /**
  * Parses CSV text into a table of rows of raw string cells (RFC 4180).
@@ -82,7 +81,7 @@ const isTrue = (v: string | undefined): boolean => String(v ?? "").trim().toLowe
  * @param rows - header-keyed rows; uses `Parameter,Object,Writable,Value,Value type`.
  * @returns the inferred `root` and the `tree` (shaped like `{ [root]: {...} }`).
  */
-export function rowsToTree(rows: Record<string, string>[]): LoadedTemplate {
+export function rowsToTree(rows: Record<string, string>[]): LoadedModel {
   const tops = rows.map((r) => (r.Parameter || "").split(".")[0]).filter(Boolean);
   const root = tops.find((t) => t === "Device" || t === "InternetGatewayDevice") ?? tops[0] ?? "Device";
 

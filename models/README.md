@@ -1,14 +1,14 @@
-# Device templates
+# Device models
 
-A **template** is a full parameter tree for a device *type* (a ZTE, a Huawei, a
+A **model** is a full parameter tree for a device *type* (a ZTE, a Huawei, a
 generic IGD). A device loads one as its base tree instead of the built-in
 `defaultTR98/181`. The simulator then injects any **missing required nodes**
 (`ManagementServer`, the diagnostics subtrees) from its defaults and overlays
 per-device identity (`{i}` serial / OUI / MAC + ACS / Connection-Request config),
-so a template never has to carry boilerplate or real credentials.
+so a model never has to carry boilerplate or real credentials.
 
-Templates are resolved by name from the templates directory (default
-`./templates`): `zte` → `templates/zte.csv` or `templates/zte.json`.
+Models are resolved by name from the models directory (default
+`./models`): `zte` → `models/zte.csv` or `models/zte.json`.
 
 ## CSV format (rich)
 
