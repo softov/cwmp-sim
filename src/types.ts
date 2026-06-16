@@ -20,14 +20,22 @@ export type DeviceStats = {
   informs: number;
   /** Write failures (e.g. SetParameterValues rejected a value). */
   failures: number;
+  /** Connection requests received (authenticated + accepted by the CR server). */
+  crReceived: number;
+  /** Connection-request auth failures (wrong credentials; the initial Digest challenge is not counted). */
+  crAuthFail: number;
+  /** Auth failures the device hit as a client POSTing to the ACS (HTTP 401). */
+  acsAuthFail: number;
+  /** Download/Upload (transfer) tasks that ended in a fault. */
+  transferFail: number;
   lastRecv: RpcMark | null;
   lastSent: RpcMark | null;
   /** Timestamp of the last Inform. */
   lastInform: number | null;
   /** Pending tasks (queued diagnostics/transfers); device-only, omitted on the global. */
   pending?: number;
-  /** Recent tasks the device ran (newest last; capped). */
-  tasks: { type: string; at: number }[];
+  /** Recent tasks the device ran (newest last; capped). `ok=false` ⇒ ended in a fault. */
+  tasks: { type: string; at: number; ok?: boolean }[];
 };
 
 /** Payload of the `device:rpc` event (forwarded on the bus). */
@@ -95,6 +103,12 @@ export type CwmpDeviceOptions = {
   mac?: string;
   index?: number;
   logger?: Logger;
+  /** Periodic-inform interval in **milliseconds** (default 300000). The CLI takes seconds and ×1000s here. */
+  interval?: number;
+  /** Suppress *periodic* informs (the boot/CR informs still fire). `--off inform`. */
+  noInform?: boolean;
+  /** Don't register/advertise this device's Connection-Request route. `--off cr`. */
+  noCr?: boolean;
   /** A pre-loaded device model (base parameter tree). Resolved objects only — the library reads no files. */
   model?: LoadedModel;
 };

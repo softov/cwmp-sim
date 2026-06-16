@@ -59,6 +59,10 @@ function snapshot(client: CWMPSimulator) {
         recv: Object.values(st.rpc).reduce((a, b) => a + b, 0),
         sent: Object.values(st.sent).reduce((a, b) => a + b, 0),
         failures: st.failures,
+        crReceived: st.crReceived,
+        crAuthFail: st.crAuthFail,
+        acsAuthFail: st.acsAuthFail,
+        transferFail: st.transferFail,
         pending: st.pending,
       };
     }),
@@ -164,6 +168,10 @@ function wireFeed(client: CWMPSimulator, send: Broadcast): void {
   client.on("device:save", (d: CWMPDevice) => send({ type: "device:save", serial: s(d) }));
   client.on("device:load", (d: CWMPDevice) => send({ type: "device:load", serial: s(d) }));
   client.on("device:rpc", (d: CWMPDevice, info: Record<string, unknown>) => send({ type: "device:rpc", serial: s(d), ...info }));
+  client.on("device:crReceived", (d: CWMPDevice) => send({ type: "device:crReceived", serial: s(d) }));
+  client.on("device:crAuthFail", (d: CWMPDevice) => send({ type: "device:crAuthFail", serial: s(d) }));
+  client.on("device:acsAuthFail", (d: CWMPDevice) => send({ type: "device:acsAuthFail", serial: s(d) }));
+  client.on("device:transferFail", (d: CWMPDevice, detail?: string) => send({ type: "device:transferFail", serial: s(d), detail }));
 }
 
 /** Completes the WebSocket handshake for `/api/events` and tracks the socket. */

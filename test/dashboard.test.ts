@@ -225,3 +225,31 @@ test("WS /api/events streams device:* events to a connected client", async () =>
     await dash.close();
   }
 });
+
+test("the new counters surface in /api/fleet (per-device + global) and /api/devices", async () => {
+  const sim = makeSim(2);
+  sim._devices[0].handleCrReceived();
+  sim._devices[0].handleCrAuthFail();
+  sim._devices[1].handleAcsAuthFail();
+  sim._devices[0].handleTransferFail("Download");
+  const dash = await startDashboard(sim, { port: 0 });
+  try {
+    const fleet: any = await (await fetch(dash.url + "api/fleet")).json();
+    // per-device summary carries the counters (so the UI can sum "current")
+    assert.equal(fleet.devices[0].crReceived, 1);
+    assert.equal(fleet.devices[0].crAuthFail, 1);
+    assert.equal(fleet.devices[0].transferFail, 1);
+    assert.equal(fleet.devices[1].acsAuthFail, 1);
+    // fleet-global (lifetime)
+    assert.equal(fleet.global.crReceived, 1);
+    assert.equal(fleet.global.crAuthFail, 1);
+    assert.equal(fleet.global.acsAuthFail, 1);
+    assert.equal(fleet.global.transferFail, 1);
+    // per-device stats endpoint
+    const dev: any = await (await fetch(dash.url + "api/devices/SIM-0")).json();
+    assert.equal(dev.stats.crReceived, 1);
+    assert.equal(dev.stats.transferFail, 1);
+  } finally {
+    await dash.close();
+  }
+});

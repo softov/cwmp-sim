@@ -21,7 +21,11 @@ import * as crypto from "node:crypto";
 
 /** A zero-valued stats object (used per-device and for the simulator's global). */
 export function newDeviceStats(): DeviceStats {
-  return { rpc: {}, sent: {}, informs: 0, failures: 0, lastRecv: null, lastSent: null, lastInform: null, tasks: [] };
+  return {
+    rpc: {}, sent: {}, informs: 0, failures: 0,
+    crReceived: 0, crAuthFail: 0, acsAuthFail: 0, transferFail: 0,
+    lastRecv: null, lastSent: null, lastInform: null, tasks: [],
+  };
 }
 
 /**
@@ -95,7 +99,12 @@ export default class CWMPDevice {
   _requestId: string | null = null;
   _periodicInformTimeout: any = null;
   _periodicInformInterval = 300000;
+  /** Transient: set after a diagnostic to suppress the next periodic until its follow-up. Reset each session. */
   _periodicInformDisabled = false;
+  /** Persistent (config): never schedule *periodic* informs at all. `--off inform`. Boot/CR informs still fire. */
+  _noPeriodicInform = false;
+  /** Persistent (config): don't register/advertise this device's CR route. `--off cr`. */
+  _noConnectRequest = false;
   _diag: {
     ping: DiagPing;
     traceroute: DiagTraceroute;
@@ -122,6 +131,11 @@ export default class CWMPDevice {
     this._oui = applyTemplate(options.oui || "FFFFFF", idx);
     this._productClass = options.productClass || "Simulator";
     this._serialNumber = applyTemplate(options.serialNumber || "123456", idx);
+
+    // Control knobs (config). Interval arrives in ms (the CLI converts seconds).
+    if (options.interval && options.interval > 0) this._periodicInformInterval = options.interval;
+    this._noPeriodicInform = options.noInform ?? false;
+    this._noConnectRequest = options.noCr ?? false;
 
     // Base parameter tree. A provided model wins — its top-level key sets the
     // root (TR-098 vs TR-181); we deep-clone so a model shared across a fleet
@@ -386,6 +400,30 @@ export default class CWMPDevice {
     this._events.emit("rpc", this, { method: "SetParameterValues", dir: "fail", ok: false, detail: path } as RpcEvent);
   }
 
+  /** A connection request was authenticated + accepted for this device. */
+  handleCrReceived(): void {
+    this._stats.crReceived++;
+    this._events.emit("crReceived", this);
+  }
+
+  /** A connection request for this device failed auth (wrong credentials). */
+  handleCrAuthFail(): void {
+    this._stats.crAuthFail++;
+    this._events.emit("crAuthFail", this);
+  }
+
+  /** The device (as a client) got an HTTP 401 from the ACS. */
+  handleAcsAuthFail(): void {
+    this._stats.acsAuthFail++;
+    this._events.emit("acsAuthFail", this);
+  }
+
+  /** A Download/Upload transfer ended in a fault. */
+  handleTransferFail(kind: "Download" | "Upload"): void {
+    this._stats.transferFail++;
+    this._events.emit("transferFail", this, kind);
+  }
+
   /** A serializable snapshot of this device's stats (+ live `pending`). */
   getStats(): DeviceStats {
     return {
@@ -393,6 +431,10 @@ export default class CWMPDevice {
       sent: { ...this._stats.sent },
       informs: this._stats.informs,
       failures: this._stats.failures,
+      crReceived: this._stats.crReceived,
+      crAuthFail: this._stats.crAuthFail,
+      acsAuthFail: this._stats.acsAuthFail,
+      transferFail: this._stats.transferFail,
       lastRecv: this._stats.lastRecv,
       lastSent: this._stats.lastSent,
       lastInform: this._stats.lastInform,
@@ -480,7 +522,7 @@ export default class CWMPDevice {
    * @param {number} interval - Interval in ms (default: this._periodicInformInterval).
    */
   setPeriodicInform(event: string = "2 PERIODIC", interval: number = 0) {
-    if (this._periodicInformDisabled) return;
+    if (this._noPeriodicInform || this._periodicInformDisabled) return;
     if (this._periodicInformTimeout) clearTimeout(this._periodicInformTimeout);
 
     let periodicInformInterval = interval || this._periodicInformInterval;
@@ -495,7 +537,14 @@ export default class CWMPDevice {
    */
   async sendRequest(xml: string): Promise<null | string> {
     this._log.trace("→ ACS\n" + xml);
-    const body = await this._httpClient.sendRequest(xml);
+    let body: null | string;
+    try {
+      body = await this._httpClient.sendRequest(xml);
+    } catch (e) {
+      // The ACS rejected our credentials — count it (client-side auth failure).
+      if ((e as { statusCode?: number })?.statusCode === 401) this.handleAcsAuthFail();
+      throw e;
+    }
     this._log.trace("← ACS\n" + (body && body.length ? body : "(empty / 204)"));
 
     if (this._pendingReboot) {
@@ -586,8 +635,14 @@ export default class CWMPDevice {
    */
   finishTask(task: CWMPTask) {
     if (!task) return;
-    this._stats.tasks.push({ type: task._type, at: Date.now() });
+    // A task carries a result fault code ("" / "0" ⇒ success). Record the
+    // outcome in history; a failed Download/Upload also bumps transferFail.
+    const fault = (task as { _result?: { _faultCode?: string } })._result?._faultCode;
+    const ok = fault === undefined || fault === "" || fault === "0";
+    this._stats.tasks.push({ type: task._type, at: Date.now(), ok });
     if (this._stats.tasks.length > 20) this._stats.tasks.shift();
+    if (!ok && task._type === "task-download") this.handleTransferFail("Download");
+    if (!ok && task._type === "task-upload") this.handleTransferFail("Upload");
     this._events.emit("diagnostic", this, task._type, "end");
     task._isRequested = false;
     task._isRunning = false;

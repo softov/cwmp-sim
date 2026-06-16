@@ -17,6 +17,11 @@ _Check the box and set 🟢 when a plan ships. Keep these in sync with `../index
   counters (per-RPC received, failures, informs), last recv/sent RPC, pending + recent tasks, last-inform age;
   device summary panel, param search, searchable/clearable/counted log; lib-tracked `_stats` + `device:rpc` event,
   simulator `_stats` (lifetime, event-time). _(Shipped — P1 lib/API, P2 UI panels/sidebar/global, P3 searches/log; zero deps.)_
+- [x] 🟢 **03** — [Control config + telemetry v2](./03-control-config-telemetry.md) · Priority: Medium — CLI control
+  (`--interval <sec>`, `--off inform`/`--off cr`, repeatable + case-insensitive, group-scoped) → device
+  `_periodicInformInterval`/`_noPeriodicInform`/`_noConnectRequest`; four new counters (CR received, CR
+  auth-fail, ACS auth-fail, transfer-fail), each its own device event accumulated fleet-wide + surfaced in
+  the dashboard; fixed the global `rpc sent · current`. _(Shipped — P1 config, P2 counters, P3 UI; zero deps.)_
 
 ## Direction
 

@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import CWMPSimulator from "../src/cwmp-sim.ts";
+import CWMPDevice from "../src/cwmp-device.ts";
 import { buildOptions } from "../src/config/index.ts";
 import { resolveFleet } from "../models.ts";
 
@@ -110,4 +111,24 @@ test("addGroup is reusable and keeps the fleet index running", () => {
   assert.equal(sim._devices.length, 4);
   // indices continue past the initial group (0,1 → 2,3)
   assert.deepEqual(sim._devices.map((d) => d.getValue(SERIAL)), ["SIM-0", "SIM-1", "SIM-2", "SIM-3"]);
+});
+
+test("--off cr: a noCr device is not CR-registered and gets no ConnectionRequestURL", () => {
+  const sim = new CWMPSimulator(makeOptions());
+  const registered: string[] = [];
+  // Stub the CR server + connection so _registerAndBoot runs without listening.
+  (sim as any)._connectRequestServer = { register: (h: string) => registered.push(h), unregister() {} };
+  (sim as any)._connection = { url: "http://cr.local/" };
+
+  const normal = sim._devices[0];
+  (normal as any).start = () => {};
+  sim._registerAndBoot(normal, 0);
+  assert.equal(registered.length, 1); // normal device registers
+  assert.match(normal.getValue("Device.ManagementServer.ConnectionRequestURL"), /^http:\/\/cr\.local\//);
+
+  const off = new CWMPDevice({ rootName: "Device", serialNumber: "OFF-CR", noCr: true });
+  (off as any).start = () => {};
+  sim._registerAndBoot(off, 0);
+  assert.equal(registered.length, 1); // unchanged — noCr skipped registration
+  assert.equal(off.getValue("Device.ManagementServer.ConnectionRequestURL"), "");
 });

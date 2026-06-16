@@ -28,6 +28,10 @@ export type CrRoute = {
   credentials(): { user: string; pass: string };
   /** Invoked on an authenticated connection request. */
   onRequest(): void;
+  /** Telemetry: a connection request was accepted for this route (after auth). */
+  onReceived?(): void;
+  /** Telemetry: a connection request failed auth (wrong credentials, not the initial challenge). */
+  onAuthFail?(): void;
 };
 
 type HttpTransport = {
@@ -167,6 +171,12 @@ export default class CWMPConn {
    */
   handleRequest(req: http.IncomingMessage, res: http.ServerResponse, route: CrRoute) {
     const { user, pass } = route.credentials();
+    // An auth *failure* = credentials were presented but wrong. The initial
+    // no-`Authorization` 401 is the normal Digest/Basic challenge, not a failure.
+    const authFail = () => {
+      route.onAuthFail?.();
+      this.sendChallenge(res);
+    };
 
     if (user && pass) {
       const auth = req.headers['authorization'];
@@ -181,23 +191,24 @@ export default class CWMPConn {
 
       if (this._options.authMode === "Digest") {
         if (scheme !== "Digest" || !this.validateDigest(req, auth.substring(7), user, pass)) {
-          this.sendChallenge(res);
+          authFail();
           return;
         }
       } else {
         // Basic
         if (scheme !== 'Basic') {
-          this.sendChallenge(res);
+          authFail();
           return;
         }
         const credentials = Buffer.from(parts[1], 'base64').toString().split(':');
         if (credentials[0] !== user || credentials[1] !== pass) {
-          this.sendChallenge(res);
+          authFail();
           return;
         }
       }
     }
 
+    route.onReceived?.();
     this._log.info("Received Connection Request");
     res.writeHead(200);
     res.end();

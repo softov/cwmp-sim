@@ -30,6 +30,12 @@ export function printHelp(): string {
     lines.push("");
   }
 
+  lines.push("  --off <feature> [group]");
+  lines.push("      Disable a feature for the group (repeatable, case-insensitive):");
+  lines.push("        inform — no periodic informs (boot/CR informs still fire)");
+  lines.push("        cr     — don't register/advertise the Connection-Request route");
+  lines.push("      e.g. --model zte --off inform --off cr");
+  lines.push("");
   lines.push("  --help");
   lines.push("      Show this help message");
 

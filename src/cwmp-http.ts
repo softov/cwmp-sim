@@ -265,6 +265,15 @@ export default class CwmpHttp {
 
     const { res, body } = await requestWithDigest(this._requestParams);
 
+    // A *final* 401 (after the digest retry) means the ACS rejected our
+    // credentials — surface it distinctly so the device can count it.
+    if (res.statusCode === 401) {
+      this.finish();
+      const err = new Error("ACS authentication failed (401)") as Error & { statusCode?: number };
+      err.statusCode = 401;
+      throw err;
+    }
+
     if (res.statusCode === 204 || body.length === 0) {
       this.finish();
       return null;

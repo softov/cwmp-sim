@@ -13,6 +13,12 @@ export type CliDeviceOptions = {
   productClass?: string;
   serialNumber?: string;
   mac?: string;
+  /** Periodic-inform interval in **milliseconds** (`--interval` takes seconds and ×1000s into here). */
+  interval?: number;
+  /** `--off inform` — suppress periodic informs. */
+  noInform?: boolean;
+  /** `--off cr` — don't register/advertise the Connection-Request route. */
+  noCr?: boolean;
   /** Path to a `.csv`/`.json` model file (resolved to a `LoadedModel` by the binary). */
   modelName?: string;
 };

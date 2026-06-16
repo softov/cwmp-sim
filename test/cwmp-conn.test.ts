@@ -67,3 +67,36 @@ test("the route asks for credentials lazily (per request)", () => {
   conn.handleRequest({ headers: { authorization: "Basic " + Buffer.from("u:old").toString("base64") }, method: "GET" } as any, res2, route);
   assert.equal(res2.statusCode, 401);
 });
+
+test("handleRequest fires onReceived on an accepted request (telemetry)", () => {
+  const conn = makeConn();
+  let received = 0, authFail = 0;
+  const route: CrRoute = {
+    credentials: () => ({ user: "", pass: "" }),
+    onRequest: () => {},
+    onReceived: () => received++,
+    onAuthFail: () => authFail++,
+  };
+  conn.handleRequest({ headers: {}, method: "GET" } as any, mockRes(), route);
+  assert.equal(received, 1);
+  assert.equal(authFail, 0);
+});
+
+test("handleRequest fires onAuthFail on wrong credentials, not on the initial challenge", () => {
+  const conn = makeConn({ authMode: "Basic" });
+  let received = 0, authFail = 0;
+  const route: CrRoute = {
+    credentials: () => ({ user: "u", pass: "p" }),
+    onRequest: () => {},
+    onReceived: () => received++,
+    onAuthFail: () => authFail++,
+  };
+  // initial challenge (no auth header) — not a failure
+  conn.handleRequest({ headers: {}, method: "GET" } as any, mockRes(), route);
+  assert.equal(authFail, 0);
+  // wrong password — an auth failure
+  const wrong = "Basic " + Buffer.from("u:WRONG").toString("base64");
+  conn.handleRequest({ headers: { authorization: wrong }, method: "GET" } as any, mockRes(), route);
+  assert.equal(authFail, 1);
+  assert.equal(received, 0);
+});

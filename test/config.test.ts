@@ -83,3 +83,33 @@ test("a group-scoped flag before the first --model seeds the base for every grou
   assert.equal(o.fleet?.groups?.[0].device.serialNumber, "BASE-{i}");
   assert.equal(o.fleet?.groups?.[1].device.serialNumber, "ZTE-{i}");
 });
+
+test("--interval is seconds → milliseconds on the group device", () => {
+  assert.equal(buildOptions({}, ["--interval", "300"]).fleet?.groups?.[0].device.interval, 300000);
+  // default (unset) is 0 → the device keeps its built-in 300000ms
+  assert.equal(buildOptions({}, []).fleet?.groups?.[0].device.interval, 0);
+  assert.equal(buildOptions({ DEVICE_INTERVAL: "5" }, []).fleet?.groups?.[0].device.interval, 5000);
+});
+
+test("--off inform / --off cr is repeatable, case-insensitive → noInform/noCr", () => {
+  const off = buildOptions({}, ["--off", "inform", "--off", "CR"]).fleet?.groups?.[0].device;
+  assert.equal(off?.noInform, true);
+  assert.equal(off?.noCr, true);
+  const none = buildOptions({}, []).fleet?.groups?.[0].device;
+  assert.equal(none?.noInform, false);
+  assert.equal(none?.noCr, false);
+});
+
+test("--off binds per group; a base --off is inherited by every group", () => {
+  const o = buildOptions({}, [
+    "--off", "inform",
+    "--model", "huawei",
+    "--model", "zte", "--off", "cr",
+  ]);
+  // group 1 inherits the base --off inform
+  assert.equal(o.fleet?.groups?.[0].device.noInform, true);
+  assert.equal(o.fleet?.groups?.[0].device.noCr, false);
+  // group 2 inherits inform AND adds its own cr
+  assert.equal(o.fleet?.groups?.[1].device.noInform, true);
+  assert.equal(o.fleet?.groups?.[1].device.noCr, true);
+});

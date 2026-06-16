@@ -2,6 +2,20 @@ import { configFields, type ConfigField } from "./fields.ts";
 import type { CliOptions, CliFleetGroup } from "./types.ts";
 
 const MODEL_FLAG = "--model";
+// `--off <feature>` is repeatable (--off inform --off cr) so it can't ride the
+// single-value field machinery — the parser accumulates it (comma-joined) per
+// segment and buildOptions maps the resulting set onto device flags.
+const OFF_FLAG = "--off";
+
+/** Union of the `--off` features across the given segments (case-insensitive). */
+function offSet(...maps: (Map<string, string> | undefined)[]): Set<string> {
+  const set = new Set<string>();
+  for (const m of maps) {
+    const raw = m?.get(OFF_FLAG);
+    if (raw) for (const f of raw.split(",")) if (f.trim()) set.add(f.trim().toLowerCase());
+  }
+  return set;
+}
 
 function setPath(target: Record<string, any>, path: string, value: unknown): void {
   const parts = path.split(".");
@@ -59,6 +73,11 @@ function readGrouped(
       segments.push(new Map());
       current = segments.length - 1;
       segments[current].set(flag, value);
+    } else if (flag === OFF_FLAG) {
+      // Repeatable: accumulate comma-joined within the current segment.
+      const seg = segments[current];
+      const prev = seg.get(OFF_FLAG);
+      seg.set(OFF_FLAG, prev ? `${prev},${value}` : value);
     } else if (groupFlags.has(flag)) {
       segments[current].set(flag, value);
     } else {
@@ -115,21 +134,22 @@ export function buildOptions(
   const options: Record<string, any> = {};
   for (const field of globalFields) setPath(options, field.path, resolveField(field, env, globalArgs));
 
-  // Base group-field values (inherited by every group; not part of the output).
-  const base: Record<string, any> = {};
-  for (const field of groupFields) setPath(base, field.path, resolveField(field, env, baseSeg));
+  // One group's effective options: base group-field values overlaid by the
+  // segment's, plus the `--off` set (base ∪ group) mapped onto device flags.
   const groupOf = (seg?: Map<string, string>): CliFleetGroup => {
     const tmp: Record<string, any> = {};
     for (const field of groupFields) setPath(tmp, field.path, resolveField(field, env, baseSeg, seg));
-    return { count: tmp.fleet?.count ?? 1, device: tmp.device ?? {} };
+    const device = tmp.device ?? {};
+    const off = offSet(baseSeg, seg);
+    device.noInform = off.has("inform");
+    device.noCr = off.has("cr");
+    return { count: tmp.fleet?.count ?? 1, device };
   };
 
   // Each `--model` segment is a group; with none, a single group from the base.
   const explicit = segments.slice(1);
   const groups: CliFleetGroup[] =
-    explicit.length > 0
-      ? explicit.map((seg) => groupOf(seg))
-      : [{ count: base.fleet?.count ?? 1, device: base.device ?? {} }];
+    explicit.length > 0 ? explicit.map((seg) => groupOf(seg)) : [groupOf(undefined)];
 
   options.fleet ??= {};
   options.fleet.groups = groups;

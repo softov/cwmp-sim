@@ -367,16 +367,23 @@
     function renderGlobal() {
       var box = $('#global'); if (!box) return;
       var g = fleetData.global || {};
-      var cur = { informs: 0, recv: 0, sent: 0, failures: 0 };
-      fleetData.devices.forEach(function (d) { cur.informs += d.informs || 0; cur.recv += d.recv || 0; cur.sent += d.sent || 0; cur.failures += d.failures || 0; });
+      var keys = ['informs', 'recv', 'sent', 'failures', 'crReceived', 'crAuthFail', 'acsAuthFail', 'transferFail'];
+      var cur = {};
+      keys.forEach(function (k) { cur[k] = 0; });
+      fleetData.devices.forEach(function (d) { keys.forEach(function (k) { cur[k] += d[k] || 0; }); });
+      function lc(lifetime, k) { return (lifetime || 0) + ' · ' + cur[k]; } // lifetime · current
       box.innerHTML = '';
       var h = document.createElement('h3'); h.textContent = 'fleet — lifetime · current';
       box.append(h,
         row('devices', fleetData.devices.length),
-        row('informs', (g.informs || 0) + ' · ' + cur.informs),
-        row('rpc recv', sumRpc(g.rpc) + ' · ' + cur.recv),
-        row('rpc sent', sumRpc(g.sent) + ' · ' + cur.sent),
-        row('failures', (g.failures || 0) + ' · ' + cur.failures));
+        row('informs', lc(g.informs, 'informs')),
+        row('rpc recv', lc(sumRpc(g.rpc), 'recv')),
+        row('rpc sent', lc(sumRpc(g.sent), 'sent')),
+        row('failures', lc(g.failures, 'failures')),
+        row('cr received', lc(g.crReceived, 'crReceived')),
+        row('cr auth-fail', lc(g.crAuthFail, 'crAuthFail')),
+        row('acs auth-fail', lc(g.acsAuthFail, 'acsAuthFail')),
+        row('transfer-fail', lc(g.transferFail, 'transferFail')));
     }
 
     function loadFleet() { api('/api/fleet').then(renderFleet) }
@@ -419,12 +426,16 @@
           row('rpc recv', sumRpc(st.rpc)),
           row('rpc sent', sumRpc(st.sent)),
           row('failures', st.failures || 0),
+          row('cr received', st.crReceived || 0),
+          row('cr auth-fail', st.crAuthFail || 0),
+          row('acs auth-fail', st.acsAuthFail || 0),
+          row('transfer-fail', st.transferFail || 0),
           row('pending', st.pending || 0),
           row('last recv', st.lastRecv ? st.lastRecv.method : '—'),
           row('last sent', st.lastSent ? st.lastSent.method : '—'),
           row('last inform', ago(st.lastInform)));
         var tk = document.createElement('div'); tk.className = 'tasks';
-        tk.textContent = 'recent tasks: ' + ((st.tasks || []).slice().reverse().map(function (t) { return t.type }).join(', ') || '—');
+        tk.textContent = 'recent tasks: ' + ((st.tasks || []).slice().reverse().map(function (t) { return t.type + (t.ok === false ? '✗' : '') }).join(', ') || '—');
         sm.append(tk);
 
         var actions = document.createElement('div'); actions.className = 'actions';
@@ -492,6 +503,18 @@
         if (m.type === 'device:rpc') {
           var line = m.dir === 'recv' ? 'Received: ' + m.method : m.dir === 'sent' ? 'Sent: ' + m.method : 'Failed: ' + (m.detail || m.method);
           feed(m.serial, line, m.dir === 'fail');
+          scheduleFleetRefresh();
+          return;
+        }
+        var COUNTER_LINES = {
+          'device:crReceived': ['CR received', false],
+          'device:crAuthFail': ['CR auth failure', true],
+          'device:acsAuthFail': ['ACS auth failure', true],
+          'device:transferFail': ['Transfer failed', true]
+        };
+        if (COUNTER_LINES[m.type]) {
+          var c = COUNTER_LINES[m.type];
+          feed(m.serial, c[0] + (m.detail ? ': ' + m.detail : ''), c[1]);
           scheduleFleetRefresh();
           return;
         }

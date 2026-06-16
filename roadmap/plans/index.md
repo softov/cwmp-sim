@@ -43,6 +43,7 @@ Reference: [`00-dashboard.md`](./dashboard/00-dashboard.md)
 |---|------|--------|----------|--------------|
 | 01 | [Web dashboard + control API](./dashboard/01-dashboard.md) | 🟢 Shipped | Medium | fleet/04 (🟢) |
 | 02 | [Metrics & observability](./dashboard/02-metrics-observability.md) | 🟢 Shipped | Medium | dashboard/01 (🟢) |
+| 03 | [Control config + telemetry v2](./dashboard/03-control-config-telemetry.md) | 🟢 Shipped | Medium | dashboard/02 (🟢) |
 
 ## docs
 

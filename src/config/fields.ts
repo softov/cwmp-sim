@@ -118,6 +118,16 @@ export const configFields: ConfigField<unknown>[] = [
     parse: asString,
     scope: "group"
   },
+  {
+    path: "device.interval",
+    env: "DEVICE_INTERVAL",
+    flag: "--interval",
+    label: "Periodic-inform interval in SECONDS (0 = built-in 300s); stored as ms",
+    default: 0,
+    parse: (value) => asInt(value) * 1000,
+    format: (value) => `${(value as number) / 1000}s`,
+    scope: "group"
+  },
 
   {
     path: "acs.url",

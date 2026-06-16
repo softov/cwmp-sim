@@ -177,6 +177,22 @@ export default class CWMPSimulator extends EventEmitter {
       if (!info.ok) this._stats.failures++;
       this.emit("device:rpc", dev, info);
     });
+    device._events.on("crReceived", (dev: CWMPDevice, detail?: string) => {
+      this._stats.crReceived++;
+      this.emit("device:crReceived", dev, detail);
+    });
+    device._events.on("crAuthFail", (dev: CWMPDevice, detail?: string) => {
+      this._stats.crAuthFail++;
+      this.emit("device:crAuthFail", dev, detail);
+    });
+    device._events.on("acsAuthFail", (dev: CWMPDevice, detail?: string) => {
+      this._stats.acsAuthFail++;
+      this.emit("device:acsAuthFail", dev, detail);
+    });
+    device._events.on("transferFail", (dev: CWMPDevice, detail?: string) => {
+      this._stats.transferFail++;
+      this.emit("device:transferFail", dev, detail);
+    });
     device._events.on("session-end", (dev: CWMPDevice) => {
       this.emit("device:session", dev, "end");
       // Dirty-gated auto-save after each session.
@@ -191,6 +207,10 @@ export default class CWMPSimulator extends EventEmitter {
       sent: { ...this._stats.sent },
       informs: this._stats.informs,
       failures: this._stats.failures,
+      crReceived: this._stats.crReceived,
+      crAuthFail: this._stats.crAuthFail,
+      acsAuthFail: this._stats.acsAuthFail,
+      transferFail: this._stats.transferFail,
       lastRecv: this._stats.lastRecv,
       lastSent: this._stats.lastSent,
       lastInform: this._stats.lastInform,
@@ -221,12 +241,17 @@ export default class CWMPSimulator extends EventEmitter {
     const connection = this._connection;
     if (!server || !connection) return;
 
-    const hash = device.getConnectionHash();
-    server.register(hash, {
-      credentials: () => device.getCrCredentials(),
-      onRequest: () => device.onConnectionRequest(),
-    });
-    device.setConnectionRequestURL(`${connection.url}${hash}`);
+    // `--off cr`: device opts out of connection requests — no route, no CR URL.
+    if (!device._noConnectRequest) {
+      const hash = device.getConnectionHash();
+      server.register(hash, {
+        credentials: () => device.getCrCredentials(),
+        onRequest: () => device.onConnectionRequest(),
+        onReceived: () => device.handleCrReceived(),
+        onAuthFail: () => device.handleCrAuthFail(),
+      });
+      device.setConnectionRequestURL(`${connection.url}${hash}`);
+    }
     // Restore saved state before the first Inform; device.start() then sets the
     // clean baseline so loaded values aren't treated as unsaved changes.
     this._applyLoadedState(device);

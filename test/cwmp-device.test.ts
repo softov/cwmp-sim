@@ -227,3 +227,27 @@ test("a shared template object is not mutated across devices (deep-cloned)", () 
   // the source template object is untouched by either device's identity overlay
   assert.equal(tpl.tree.Device.DeviceInfo.SerialNumber._value, "TPL-SERIAL");
 });
+
+test("interval option sets the periodic-inform interval (ms)", () => {
+  const d = new CWMPDevice({ rootName: "Device", serialNumber: "S1", interval: 60000 });
+  assert.equal(d._periodicInformInterval, 60000);
+  // 0/undefined keeps the built-in default
+  assert.equal(new CWMPDevice({ rootName: "Device", serialNumber: "S2" })._periodicInformInterval, 300000);
+});
+
+test("noInform makes setPeriodicInform a no-op (no periodic timer scheduled)", () => {
+  const d = new CWMPDevice({ rootName: "Device", serialNumber: "S1", noInform: true });
+  assert.equal(d._noPeriodicInform, true);
+  d.setPeriodicInform();
+  assert.equal(d._periodicInformTimeout, null);
+  // a normal device DOES schedule one
+  const n = new CWMPDevice({ rootName: "Device", serialNumber: "S2" });
+  n.setPeriodicInform();
+  assert.notEqual(n._periodicInformTimeout, null);
+  clearTimeout(n._periodicInformTimeout);
+});
+
+test("noCr option is carried onto the device", () => {
+  assert.equal(new CWMPDevice({ rootName: "Device", serialNumber: "S1", noCr: true })._noConnectRequest, true);
+  assert.equal(new CWMPDevice({ rootName: "Device", serialNumber: "S2" })._noConnectRequest, false);
+});

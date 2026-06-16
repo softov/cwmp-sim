@@ -109,3 +109,64 @@ test("a fault rpc bumps global failures", () => {
   sim._devices[0].recordFault("Device.X");
   assert.equal(sim.globalStats().failures, 1);
 });
+
+// --- telemetry v2: CR / ACS-auth / transfer counters (dashboard/03) ---
+
+test("device counts CR received / CR auth-fail / ACS auth-fail and emits a distinct event each", () => {
+  const d = makeDevice();
+  const events: string[] = [];
+  d._events.on("crReceived", () => events.push("crReceived"));
+  d._events.on("crAuthFail", () => events.push("crAuthFail"));
+  d._events.on("acsAuthFail", () => events.push("acsAuthFail"));
+  d.handleCrReceived();
+  d.handleCrReceived();
+  d.handleCrAuthFail();
+  d.handleAcsAuthFail();
+  const s = d.getStats();
+  assert.equal(s.crReceived, 2);
+  assert.equal(s.crAuthFail, 1);
+  assert.equal(s.acsAuthFail, 1);
+  assert.deepEqual(events, ["crReceived", "crReceived", "crAuthFail", "acsAuthFail"]);
+});
+
+test("finishTask counts a failed Download/Upload and records the result in history", () => {
+  const d = makeDevice();
+  d.finishTask({ _type: "task-download", _result: { _faultCode: "9010" } } as any);
+  if (d._periodicInformTimeout) clearTimeout(d._periodicInformTimeout);
+  d.finishTask({ _type: "task-upload", _result: { _faultCode: "0" } } as any);
+  if (d._periodicInformTimeout) clearTimeout(d._periodicInformTimeout);
+  const s = d.getStats();
+  assert.equal(s.transferFail, 1); // only the 9010 download
+  assert.equal(s.tasks[0].ok, false);
+  assert.equal(s.tasks[1].ok, true);
+});
+
+test("simulator accumulates the new counters globally + forwards a distinct bus event each", () => {
+  const sim = makeSim(2);
+  const seen: string[] = [];
+  sim.on("device:crReceived", () => seen.push("crReceived"));
+  sim.on("device:crAuthFail", () => seen.push("crAuthFail"));
+  sim.on("device:acsAuthFail", () => seen.push("acsAuthFail"));
+  sim.on("device:transferFail", () => seen.push("transferFail"));
+  sim._devices[0].handleCrReceived();
+  sim._devices[1].handleCrReceived();
+  sim._devices[0].handleCrAuthFail();
+  sim._devices[1].handleAcsAuthFail();
+  sim._devices[0].handleTransferFail("Download");
+  const g = sim.globalStats();
+  assert.equal(g.crReceived, 2);
+  assert.equal(g.crAuthFail, 1);
+  assert.equal(g.acsAuthFail, 1);
+  assert.equal(g.transferFail, 1);
+  assert.equal(seen.length, 5);
+});
+
+test("global counters survive device removal (lifetime)", () => {
+  const sim = makeSim(2);
+  sim._devices[0].handleCrReceived();
+  sim._devices[1].handleCrAuthFail();
+  sim.removeDevice(sim._devices[0]);
+  const g = sim.globalStats();
+  assert.equal(g.crReceived, 1);
+  assert.equal(g.crAuthFail, 1);
+});
