@@ -1,0 +1,15 @@
+Parameter,Object,Writable,Value,Value type
+InternetGatewayDevice,true,false,,
+InternetGatewayDevice.DeviceInfo,true,false,,
+InternetGatewayDevice.DeviceInfo.Manufacturer,false,false,Generic,xsd:string
+InternetGatewayDevice.DeviceInfo.ManufacturerOUI,false,false,00E0FC,xsd:string
+InternetGatewayDevice.DeviceInfo.ProductClass,false,false,GenericIGD,xsd:string
+InternetGatewayDevice.DeviceInfo.SerialNumber,false,false,000000,xsd:string
+InternetGatewayDevice.DeviceInfo.HardwareVersion,false,false,1.0,xsd:string
+InternetGatewayDevice.DeviceInfo.SoftwareVersion,false,false,1.0.0,xsd:string
+InternetGatewayDevice.LANDevice,true,false,,
+InternetGatewayDevice.LANDevice.1,true,false,,
+InternetGatewayDevice.LANDevice.1.WLANConfiguration,true,false,,
+InternetGatewayDevice.LANDevice.1.WLANConfiguration.1,true,false,,
+InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.SSID,false,true,Generic_WiFi,xsd:string
+InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.Channel,false,true,6,xsd:unsignedInt

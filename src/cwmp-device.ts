@@ -16,6 +16,7 @@ import methods from "./cwmp-methods.ts";
 import soap from "./cwmp-soap.ts";
 import xmlParser from "./xml-parser.ts";
 import { applyTemplate } from "./config/template.ts";
+import { convertObjectToCwmp } from "./template/json.ts";
 import * as crypto from "node:crypto";
 
 /**
@@ -24,42 +25,6 @@ import * as crypto from "node:crypto";
  */
 export function hashConnectionPath(serial: string): string {
   return crypto.createHash("md5").update(serial).digest("hex").slice(0, 8);
-}
-
-function inferXsdType(value: any): string {
-  if (typeof value === "boolean") return "xsd:boolean";
-  if (typeof value === "number") {
-    return Number.isInteger(value) ? "xsd:int" : "xsd:float";
-  }
-  return "xsd:string";
-}
-
-function convertObjectToCwmp(
-  input: Record<string, any>,
-  options?: {
-    writableKeys?: Set<string>;
-    defaultWritable?: boolean;
-  }
-): Record<string, any> {
-  const internal: Record<string, any> = {};
-
-  for (const [key, value] of Object.entries(input)) {
-    // recurse
-    if (value !== null && typeof value === "object" && !Array.isArray(value)) {
-      internal[key] = convertObjectToCwmp(value, options);
-      continue;
-    }
-
-    const writable = options?.writableKeys?.has(key) ?? options?.defaultWritable ?? false;
-
-    internal[key] = {
-      _value: value === null ? "" : String(value),
-      _type: inferXsdType(value),
-      _writable: writable
-    };
-  }
-
-  return internal;
 }
 
 /**

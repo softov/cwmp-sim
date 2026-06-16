@@ -21,9 +21,9 @@ Broadband Forum conformance implementation. This document tracks current gaps
 Forward-looking enhancements (items that are *current gaps* live under Known limitations).
 
 ### A. Scale & fleet simulation
-- [ ] 1. **Multi-device mode** — spawn N simulated CPEs from one process, each with its own serial/OUI/MAC (`--count 100`). **(L, high-impact)**
-- [ ] 2. **Serial/MAC offset + templating** — derive unique identities from a base + index. **(S)**
-- [ ] 3. **Staggered boot / inform jitter** — randomized startup so N devices don't hammer the ACS at once. **(S)**
+- [x] 1. **Multi-device mode** — `--count N` runs N self-running CPEs in one process behind a single shared `CWMPConn`, path-routed by `/{hash}`. See `roadmap/plans/fleet/01-multi-device-runtime.md`. **(L, high-impact)**
+- [x] 2. **Serial/MAC offset + templating** — identity fields support `{i}`/`{i:04}`/`{i+N}`/`{i:02x}`, resolved per-device from its index. See `roadmap/plans/enhancements/01-pre-fleet-enhancements-p3-serial-mac-templating.md`. **(S)**
+- [x] 3. **Staggered boot / inform jitter** — `--boot-delay` spaces each device's boot so N devices don't hammer the ACS at once (part of the fleet runtime). **(S)**
 - [ ] 4. **CSV/JSON fleet definition** — one file describing many devices (paraam's `agent.csv` model). **(M)**
 
 ### B. Connection Request mechanisms (currently HTTP + Digest only)
@@ -48,7 +48,7 @@ Forward-looking enhancements (items that are *current gaps* live under Known lim
 - [x] 15. **SOAP wire-log / envelope dump** — delivered via the logging subsystem: SOAP envelopes log at `trace` (`--log-level trace`). See `roadmap/plans/enhancements/02-logging-subsystem.md`.
 - [ ] 16. **Web dashboard / REST control API** — start/stop devices, trigger informs, set params at runtime. **(L)**
 - [ ] 17. **Scriptable scenarios** — JSON/YAML script of "boot → wait → expect SPV → assert" (like AX INTEROP / CDRouter). **(L)**
-- [ ] 18. **Library/SDK API** — stable exports so others embed the simulator ("convert to a lib" goal). **(M)**
+- [x] 18. **Library/SDK API** — `src/index.ts` exports `CWMPSimulator`/`CWMPDevice` + option types; `package.json` `main`/`types`/`exports` point at it; the device is self-running and importable. See `roadmap/plans/architecture/01-entry-lib-refactor.md`. **(M)**
 
 ### G. Quality / packaging
 - [ ] 19. **Conformance checklist** — document which TR-069 Amendment 5 RPCs/behaviors are spec-conformant. **(S, docs)**

@@ -1,0 +1,21 @@
+{
+  "Device": {
+    "DeviceInfo": {
+      "Manufacturer": "Generic",
+      "ManufacturerOUI": "00E0FC",
+      "ProductClass": "GenericTR181",
+      "SerialNumber": "000000",
+      "HardwareVersion": "1.0",
+      "SoftwareVersion": "1.0.0"
+    },
+    "WiFi": {
+      "Radio": {
+        "1": {
+          "Enable": true,
+          "Channel": 6,
+          "OperatingFrequencyBand": "2.4GHz"
+        }
+      }
+    }
+  }
+}
