@@ -1,6 +1,6 @@
 <!--
 Domain: <domain>
-Status: Not started | In progress | Blocked | Partial | Shipped
+Status: ⚪ Not started | 🟡 In progress | 🟢 Shipped | 🔴 Blocked   (🟡 also covers Partial)
 Priority: Low | Medium | High
 Created: YYYY-MM-DD
 Revalidated: YYYY-MM-DD
@@ -10,7 +10,10 @@ Reference: ./00-<domain>.md
 
 # <DOMAIN-NN> — <Plan title>
 
-_Status: Not started · Priority: Medium · Created: YYYY-MM-DD_
+_Status: ⚪ Not started · Priority: Medium · Created: YYYY-MM-DD_
+
+<!-- Status legend: ⚪ Not started · 🟡 In progress / Partial · 🟢 Shipped · 🔴 Blocked.
+     When status changes, update it in THREE places: this header, ./00-<domain>.md, and ../index.md. -->
 
 ## Goal
 
@@ -31,7 +34,7 @@ Grounds the whole plan. Filled during Gate 1 — never empty, never SDK-only.
 ### Runtime path
 
 ```
-entrypoint → controller/bridge → service/manager → sdk contract → store/event → UI effect
+entrypoint → dispatcher/orchestrator → module/service → contract/types → store/event → observable effect
 ```
 
 ### Existing patterns to reuse
@@ -58,11 +61,11 @@ here is undecided — and an undecided fork hit during implementation means STOP
 - **Event flow** — …
 - **State flow** — …
 - **Layer responsibilities** — xxx: …
-- **Source-of-truth files** — `packages/src/...`
+- **Source-of-truth files** — `src/...` (the module that owns the shared types/contracts).
 
 ## Phases
 
-> If this plan was split, this section is a phase map linking child plans instead. See README.
+> If this plan was split, this section is a phase map linking child plans instead (see the parent `00-<domain>.md`).
 
 ### Phase 1 — <objective>
 
@@ -105,7 +108,7 @@ Checkpoint so a fresh session can continue cold.
 ## Final verification checklist
 
 - [ ] All phases' validation steps pass.
-- [ ] `pnpm typecheck` clean (or named workspace).
-- [ ] Relevant tests pass.
-- [ ] No contract drift — shared shapes come from the SDK.
-- [ ] `index.md` status updated.
+- [ ] Type-check clean (this repo: `npm run check`).
+- [ ] Relevant tests pass (this repo: `npm test`).
+- [ ] No contract drift — shared shapes come from the source-of-truth types module.
+- [ ] Status circle synced in three places: this plan's header, `00-<domain>.md`, and `index.md`.

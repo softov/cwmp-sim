@@ -64,11 +64,25 @@ If it fits in one document, write one document — don't manufacture ceremony.
 
 - Home: `roadmap/plans/` in this repo.
 - Pick the **domain folder**.
-  Create the folder if it's the first plan for that domain, and add a `00-<domain>.md` reference stub.
+  Create the folder if it's the first plan for that domain, and add a `00-<domain>.md` reference stub —
+  a status dashboard with one checkbox line per plan (see **Status convention**).
 - Filename: next free number, kebab slug — `NN-<slug>.md`. Read `roadmap/plans/index.md` for the next number in that domain.
-- After writing, add the plan to `roadmap/plans/index.md` (domain table: link, priority, status, dependencies) and reference the template at `roadmap/plans/_TEMPLATE.md`.
+- After writing, add the plan to `roadmap/plans/index.md` (domain table: link, priority, status, dependencies) and write the plan from the template at `roadmap/plans/_TEMPLATE.md`.
 
-See `roadmap/plans/README.md` for the full organization rules.
+## Status convention
+
+Plan status is a **colored circle**, shown in three places that must stay in sync:
+
+- ⚪ **Not started** · 🟡 **In progress** (also covers Partial) · 🟢 **Shipped** · 🔴 **Blocked**
+
+The three places:
+
+1. the plan file — its `<!-- Status: … -->` metadata header **and** the `_Status: …_` line;
+2. `00-<domain>.md` — a checklist, one `- [ ] ⚪ **NN** — [title](…)` line per plan (check the box and set 🟢 when it ships);
+3. `index.md` — the domain table's Status column.
+
+When a plan's status changes, update **all three**. A plan is not done until its box is checked, its
+circle is 🟢, and its **Final verification checklist** passes.
 
 ---
 
@@ -93,7 +107,7 @@ Don't rely on internal knowledge alone when external validation matters.
 
 Write the plan from `roadmap/plans/_TEMPLATE.md`. Top to bottom:
 
-1. **Metadata header** — status, priority, dependencies, date, scope, `00-<domain>.md` pointer.
+1. **Metadata header** — status (circle, per **Status convention**), priority, dependencies, date, scope, `00-<domain>.md` pointer.
 2. **Goal** — one paragraph: what changes and why, in product terms.
 3. **Reconnaissance** — files read, searches, runtime path, patterns to reuse, gaps (Gate 1).
 4. **Decisions locked in** — table of every settled decision (Gate 2).
