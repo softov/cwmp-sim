@@ -7,8 +7,18 @@ generic IGD). A device loads one as its base tree instead of the built-in
 per-device identity (`{i}` serial / OUI / MAC + ACS / Connection-Request config),
 so a model never has to carry boilerplate or real credentials.
 
-Models are resolved by name from the models directory (default
-`./models`): `zte` → `models/zte.csv` or `models/zte.json`.
+Pass a model as a **file path** to `--model` (`.csv` or `.json`, by extension).
+Each `--model` is an independent path, so models can live in any folder —
+mix them freely across a fleet:
+
+```
+cwmp-sim \
+  --model ./models/generic-tr098.csv --count 5 \
+  --model /opt/vendor/huawei.json    --count 3
+```
+
+`--model default` (or omitting it) uses the built-in `defaultTR98/181` tree.
+This folder just holds the bundled example models.
 
 ## CSV format (rich)
 

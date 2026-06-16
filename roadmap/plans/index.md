@@ -32,7 +32,8 @@ Reference: [`00-fleet.md`](./fleet/00-fleet.md)
 |---|------|--------|----------|--------------|
 | 01 | [Multi-device runtime](./fleet/01-multi-device-runtime.md) | 🟢 Shipped | High | architecture/01, enhancements/01·P3, enhancements/02 (all 🟢) |
 | 02 | [Device models (templates)](./fleet/02-device-templates.md) | 🟢 Shipped | High | fleet/01 (🟢), enhancements/01·P3 (🟢) |
-| 03 | [Device state persistence](./fleet/03-device-state.md) | 🟡 In progress (P1 🟢) | High | fleet/02 (🟢) |
+| 03 | [Device state persistence](./fleet/03-device-state.md) | 🟢 Shipped | High | fleet/02 (🟢) |
+| 04 | [Dynamic control + event bus](./fleet/04-dynamic-control.md) | ⚪ Not started | High | fleet/03 (🟢) |
 
 ## docs
 

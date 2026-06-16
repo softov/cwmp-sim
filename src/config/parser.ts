@@ -88,13 +88,14 @@ function resolveField(
 
 /**
  * Parses environment + CLI arguments into a `CliOptions` — the CLI's own,
- * **unresolved** option shape (model *names*, a storage dir; no files read).
- * The binary turns this into a `CwmpSimulatorOptions` via `toSimulatorOptions`.
+ * **unresolved** option shape (model *paths*, a storage dir; no files read).
+ * The binary resolves the fleet (loads model files) via `resolveFleet` and
+ * composes the library's `CwmpSimulatorOptions`.
  *
- * Supports **grouped flags**: each `--model <name|path>` opens a device group;
+ * Supports **grouped flags**: each `--model <path>` opens a device group;
  * group-scoped flags bind to the current group (or seed the base before the
  * first `--model`); global flags apply fleet-wide. With no `--model`, a single
- * implicit group is produced (back-compatible with `--count`).
+ * group is produced from the base (a default device).
  *
  * Identity templating (`{i}`) is left raw here — each device stamps its own
  * index at construction time.
