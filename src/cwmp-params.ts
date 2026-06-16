@@ -153,27 +153,59 @@ export default class CwmpParams {
       }
     }
 
-    let newInstanceId = maxInstance + 1;
-    parentNode[newInstanceId] = { _writable: true };
-    if (typeof parentNode.funcObj == 'function') {
-      parentNode[newInstanceId] = parentNode.funcObj(this, { _writable: true }, newInstanceId, parentNode);
+    const newInstanceId = maxInstance + 1;
+    this._createInstance(parentNode, path, newInstanceId);
+    return [0, newInstanceId];
+  }
+
+  /**
+   * Creates object instance `instanceId` under `parentNode` (the container at
+   * `parentPath`): seeds it from the container's `funcObj` defaults and bumps the
+   * matching `…NumberOfEntries`. Shared by `addObject` (auto-numbered) and state
+   * restore (a specific saved id).
+   */
+  _createInstance(parentNode: any, parentPath: string, instanceId: number): void {
+    parentNode[instanceId] = { _writable: true };
+    if (typeof parentNode.funcObj === 'function') {
+      parentNode[instanceId] = parentNode.funcObj(this, { _writable: true }, instanceId, parentNode);
     }
 
-    // Attempt Generic NumberOfEntries Update
-    const pathParts = path.split('.');
+    // Generic <Collection>NumberOfEntries update on the grandparent.
+    const pathParts = parentPath.split('.');
     const collectionName = pathParts.pop();
     const grandParentPath = pathParts.join('.');
     if (grandParentPath) {
-      let numEntriesPath = `${grandParentPath}.${collectionName}NumberOfEntries`;
-      let node = this.findNode(numEntriesPath);
+      const numEntriesPath = `${grandParentPath}.${collectionName}NumberOfEntries`;
+      const node = this.findNode(numEntriesPath);
       if (node) {
-        let currentVal = parseInt(node._value || '0');
+        const currentVal = parseInt(node._value || '0');
         node._value = String(currentVal + 1);
         this._onChange('add', numEntriesPath, node._value);
       }
     }
+  }
 
-    return [0, newInstanceId];
+  /**
+   * Ensures every object instance referenced by `paths` exists, recreating
+   * ACS-added instances (a numeric segment under a `funcObj` container that isn't
+   * present yet) with their `funcObj` defaults + `…NumberOfEntries`. Used by state
+   * restore *before* leaf values are written, so a restored AddObject'd instance is
+   * structurally faithful (not just a bag of leaves).
+   */
+  ensureInstancesForPaths(paths: string[]): void {
+    for (const path of paths) {
+      if (!path) continue;
+      const parts = path.split('.');
+      let node: any = this._rootTree;
+      for (let i = 0; i < parts.length; i++) {
+        const key = parts[i];
+        if (node[key] === undefined && /^\d+$/.test(key) && typeof node.funcObj === 'function') {
+          this._createInstance(node, parts.slice(0, i).join('.'), parseInt(key));
+        }
+        node = node[key];
+        if (node === undefined) break; // not an instance path → set(force) creates plain nodes
+      }
+    }
   }
 
   /**

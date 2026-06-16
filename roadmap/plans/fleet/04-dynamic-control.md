@@ -95,7 +95,7 @@ CWMPDevice (_events)
 
 **Objective:** the simulator emits `device:boot`/`device:session`/`device:inform`/`device:diagnostic`. **Validation:** each device hook fires the forwarded `device:*` event with the right payload. ✅ 5 tests; full suite **172 green**; `tsc` clean.
 
-- [x] **`src/cwmp-device.ts`** — emits `boot` (in `start`), `session-start` + `inform` (event code, in `startSession`), keeps `session-end` (in `handleMethod`), `diagnostic` (friendly type + phase, in `addTask` start / `finishTask` end via a `TASK_NAMES` map: ping/traceroute/download/upload/wifi/transfer).
+- [x] **`src/cwmp-device.ts`** — emits `boot` (in `start`), `session-start` + `inform` (event code, in `startSession`), keeps `session-end` (in `handleMethod`), `diagnostic` (**raw task type** + phase, in `addTask` start / `finishTask` end — `diag-ping`/`diag-traceroute`/`diag-download`/`diag-upload`/`diag-wifi`/`task-download`/`task-upload`; no lossy friendly-name remap). Also: `finishTask` now emits a real `sessionInform` event (the follow-up Inform code) on `_events` — the old internal `fireEvent("sessionInform")` path-event was dropped; the transfer tests listen on `_events`.
 - [x] **`src/cwmp-sim.ts`** — `_wireDeviceEvents` forwards `boot`→`device:boot`, `inform`→`device:inform`(code), `session-start`→`device:session`("start",code), `session-end`→`device:session`("end") **+** the dirty-gated auto-save, `diagnostic`→`device:diagnostic`(type,phase).
 - [x] **Tests:** `test/dynamic.test.ts` — forwarding of all `device:*` with payloads; `device.start()`→boot; `startSession()`→session-start+inform; `addTask`/`finishTask`→diagnostic start/end (friendly type); `session-end` still auto-saves.
 

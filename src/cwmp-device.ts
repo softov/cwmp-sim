@@ -27,17 +27,16 @@ export function hashConnectionPath(serial: string): string {
   return crypto.createHash("md5").update(serial).digest("hex").slice(0, 8);
 }
 
-/** Friendly names for diagnostic/transfer task types (for the `device:diagnostic` bus). */
-const TASK_NAMES: Record<string, string> = {
-  "diag-ping": "ping",
-  "diag-traceroute": "traceroute",
-  "diag-download": "download",
-  "diag-upload": "upload",
-  "diag-wifi": "wifi",
-  "task-download": "transfer",
-  "task-upload": "transfer",
+/** The follow-up Inform event code a completed task schedules. */
+const TASK_INFORM_EVENTS: Record<string, string> = {
+  "diag-ping": "8 DIAGNOSTICS COMPLETE",
+  "diag-traceroute": "8 DIAGNOSTICS COMPLETE",
+  "diag-download": "8 DIAGNOSTICS COMPLETE",
+  "diag-upload": "8 DIAGNOSTICS COMPLETE",
+  "diag-wifi": "8 DIAGNOSTICS COMPLETE",
+  "task-download": "7 TRANSFER COMPLETE,M Download",
+  "task-upload": "7 TRANSFER COMPLETE,M Upload",
 };
-const taskName = (type: string): string => TASK_NAMES[type] ?? type;
 
 /**
  * Represents the simulated CPE device.
@@ -321,6 +320,10 @@ export default class CWMPDevice {
   importState(state: SavedState | null | undefined): void {
     if (!state) return;
 
+    // Recreate ACS-added object instances (funcObj defaults + NumberOfEntries)
+    // before writing leaf values, so a restored AddObject'd instance is faithful.
+    this._params.ensureInstancesForPaths(Object.keys(state.params ?? {}));
+
     for (const [path, leaf] of Object.entries(state.params ?? {})) {
       this.set(path, leaf.value, true);
       const node = this.findNode(path);
@@ -531,28 +534,17 @@ export default class CWMPDevice {
    */
   finishTask(task: CWMPTask) {
     if (!task) return;
-    this._events.emit("diagnostic", this, taskName(task._type), "end");
+    this._events.emit("diagnostic", this, task._type, "end");
     task._isRequested = false;
     task._isRunning = false;
-    switch (task._type) {
-      case "diag-download":
-      case "diag-upload":
-      case "diag-ping":
-      case "diag-traceroute":
-      case "diag-wifi":
-        this.setPeriodicInform("8 DIAGNOSTICS COMPLETE", 1000);
-        this._periodicInformDisabled = true;
-        break;
-      case "task-download":
-        this.setPeriodicInform("7 TRANSFER COMPLETE,M Download", 1000);
-        this._periodicInformDisabled = true;
-        break;
-      case "task-upload":
-        this.setPeriodicInform("7 TRANSFER COMPLETE,M Upload", 1000);
-        this._periodicInformDisabled = true;
-        break;
-      default:
-        break;
+
+    // A completed diagnostic/transfer schedules a follow-up Inform with its
+    // result code, and announces it on the bus (consumers + the transfer tests).
+    const informEvent = TASK_INFORM_EVENTS[task._type];
+    if (informEvent) {
+      this.setPeriodicInform(informEvent, 1000);
+      this._periodicInformDisabled = true;
+      this._events.emit("sessionInform", this, informEvent);
     }
   }
 
@@ -561,7 +553,7 @@ export default class CWMPDevice {
    * @param {CWMPTask} task - The task to add.
    */
   addTask(task: CWMPTask) {
-    this._events.emit("diagnostic", this, taskName(task._type), "start");
+    this._events.emit("diagnostic", this, task._type, "start");
     this._pendingTask.push(task);
     if (!this._pendingTimeout) {
       this._pendingTimeout = setTimeout(() => this.runTask(), 1000);

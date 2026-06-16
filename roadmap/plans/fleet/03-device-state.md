@@ -141,9 +141,11 @@ CWMPSimulator extends event bus
 
 ## Risks & tradeoffs
 
-- **AddObject round-trip.** Force-`set`ting an instance leaf re-creates the node, but `funcObj` defaults and
-  `…NumberOfEntries` counters won't auto-rebuild. Phase 1 restores plain leaves; if fidelity gaps show, a refinement
-  is to detect instance paths in `importState` and call `addObject` first. Flag as a known limitation initially.
+- **AddObject round-trip — ✅ ADDRESSED (2026-06-16).** `importState` now calls `CwmpParams.ensureInstancesForPaths`
+  first: for any saved path with a numeric segment under a `funcObj` container that isn't present, it recreates the
+  instance via the shared `_createInstance` (funcObj defaults + `…NumberOfEntries` bump) before writing leaves — so a
+  restored ACS-added instance is structurally faithful, not just a bag of leaves. `addObject` was refactored onto the
+  same helper. Test: `state.test.ts` "recreates an AddObject'd instance…".
 - **Serial collisions / changing the `{i}` pattern.** State is keyed by serial; if the user changes the serial
   pattern between runs, old state won't match (correct — it's a different device). Document.
 - **Event timing.** Load/`device:load` must fire at boot, not construction (listeners attach after `new`). Covered by Decision 6.

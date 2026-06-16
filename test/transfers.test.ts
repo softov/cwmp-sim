@@ -36,10 +36,10 @@ function makeDevice() {
 }
 
 // Drives a transfer handler and resolves once the task completes (the device
-// fires `sessionInform` after queuing the TransferComplete message).
+// emits `sessionInform` on its event bus after queuing the TransferComplete message).
 function runTransfer(device: CWMPDevice, trigger: () => string): Promise<{ event: string; xml: string | null }> {
   return new Promise((resolve) => {
-    device.addListener("sessionInform", (event: string) => {
+    device._events.once("sessionInform", (_dev: CWMPDevice, event: string) => {
       const msg = device.getNextMessage();
       resolve({ event, xml: msg ? msg() : null });
     });

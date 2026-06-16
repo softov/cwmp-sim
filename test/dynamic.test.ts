@@ -153,15 +153,17 @@ test("device.startSession() emits session-start and inform with the event code",
   assert.deepEqual(seen, [["session-start", "2 PERIODIC"], ["inform", "2 PERIODIC"]]);
 });
 
-test("addTask/finishTask emit diagnostic start/end with a friendly type", () => {
+test("addTask/finishTask emit diagnostic start/end with the raw task type", () => {
   const d = makeSim(1)._devices[0];
   const seen: unknown[] = [];
   d._events.on("diagnostic", (_d: CWMPDevice, type: string, phase: string) => seen.push([type, phase]));
   const task = { _type: "diag-ping" } as any;
   d.addTask(task);
   d.finishTask(task);
-  if (d._pendingTimeout) clearTimeout(d._pendingTimeout); // drop the queued runTask
-  assert.deepEqual(seen, [["ping", "start"], ["ping", "end"]]);
+  // Drop the timers addTask/finishTask scheduled (runTask + the follow-up inform).
+  if (d._pendingTimeout) clearTimeout(d._pendingTimeout);
+  if (d._periodicInformTimeout) clearTimeout(d._periodicInformTimeout);
+  assert.deepEqual(seen, [["diag-ping", "start"], ["diag-ping", "end"]]);
 });
 
 test("session-end still triggers the dirty-gated auto-save", () => {

@@ -90,6 +90,30 @@ test("importState is a no-op for null/undefined", () => {
   assert.doesNotThrow(() => d.importState(undefined));
 });
 
+test("importState recreates an AddObject'd instance with funcObj defaults + NumberOfEntries", () => {
+  const PM = "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANIPConnection.1.PortMapping";
+  const PM_COUNT =
+    "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANIPConnection.1.PortMappingNumberOfEntries";
+
+  // Source: the ACS adds an instance and sets a value, then we snapshot.
+  const src = makeDevice();
+  src.addObject(PM + ".");
+  src.set(`${PM}.1.ExternalPort`, "8080");
+  const snapshot = src.exportState();
+
+  // Destination: a fresh device with no instance yet.
+  const dst = makeDevice();
+  assert.equal(dst.get(`${PM}.1`), null);
+  assert.equal(dst.getValue(PM_COUNT), "0");
+
+  dst.importState(snapshot);
+
+  // The instance is recreated: saved override + funcObj defaults + counter.
+  assert.equal(dst.getValue(`${PM}.1.ExternalPort`), "8080");
+  assert.equal(dst.getValue(`${PM}.1.InternalPort`), "0"); // funcObj default
+  assert.equal(dst.getValue(PM_COUNT), "1"); // NumberOfEntries rebuilt (was the gap)
+});
+
 // --- dirty flag ---
 
 test("a mutation marks the device dirty; saveState clears it", () => {
