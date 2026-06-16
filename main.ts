@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 import { buildOptions, printHelp } from "./src/config/index.ts";
 import CWMPSimulator from "./src/cwmp-sim.ts";
-import { toSimulatorOptions } from "./models.ts";
+import { resolveFleet } from "./models.ts";
 import { resolveStorageDir, readState, writeState } from "./storage.ts";
+import type { CwmpSimulatorOptions } from "./src/types.ts";
 
 const argv = process.argv.slice(2);
 
@@ -11,14 +12,19 @@ if (argv.includes("--help") || argv.includes("-h")) {
   process.exit(0);
 }
 
-// config: parse CLI options (pure, no files). binary: read the model files +
-// build the resolved library options, then wire state storage.
+// config: parse CLI options (pure, no files). binary: read the model files
+// (resolveFleet) + storage dir, then compose the library options.
 const cli = buildOptions(process.env, argv);
 const storageDir = resolveStorageDir(cli.storageDir);
-const options = toSimulatorOptions(cli);
 
-// Restore each device's saved state at boot (pull); the library does no I/O.
-options.loadState = (serial) => readState(storageDir, serial);
+const options: CwmpSimulatorOptions = {
+  conn: cli.conn,
+  acs: cli.acs,
+  log: cli.log,
+  fleet: resolveFleet(cli.fleet),
+  // Restore each device's saved state at boot (pull); the library does no I/O.
+  loadState: (serial) => readState(storageDir, serial),
+};
 
 const client = new CWMPSimulator(options);
 

@@ -25,6 +25,7 @@ Forward-looking enhancements (items that are *current gaps* live under Known lim
 - [x] 2. **Serial/MAC offset + templating** — identity fields support `{i}`/`{i:04}`/`{i+N}`/`{i:02x}`, resolved per-device from its index. See `roadmap/plans/enhancements/01-pre-fleet-enhancements-p3-serial-mac-templating.md`. **(S)**
 - [x] 3. **Staggered boot / inform jitter** — `--boot-delay` spaces each device's boot so N devices don't hammer the ACS at once (part of the fleet runtime). **(S)**
 - [x] 4. **Fleet definition** — mixed-type fleets via **grouped flags**: each `--model <name|default>` opens a device group, group-scoped flags bind to it, global flags apply fleet-wide. See `roadmap/plans/fleet/02-device-templates.md` (Phase 3). _(A single `config.json` source — describing the whole fleet in one file — is a deliberate future option, not done here.)_ **(M)**
+- [x] 4b. **Per-device state persistence** — writable params (what the ACS sets) survive restarts. IO-free lib (`exportState`/`importState` + `device:save`/`device:load` events); binary file store (root `storage.ts`, `--storage-dir`, default `~/.cwmp-sim/devices/`), keyed by serial; saved on stop + after each session (dirty-gated). See `roadmap/plans/fleet/03-device-state.md`. **(M)**
 
 ### B. Connection Request mechanisms (currently HTTP + Digest only)
 - [ ] 5. **STUN-based connection requests** (TR-069 Annex G) — for CPEs behind NAT. **(M)**

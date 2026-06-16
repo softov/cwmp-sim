@@ -108,14 +108,6 @@ function populateWindowsData(device: CWMPDevice) {
 
 // Start Simulator
 const client = new CWMPSimulator({
-  device: {
-    // Force TR-181 for richer data model usually
-    // But user might want TR-098. Let's default to TR-181 (Device)
-    rootName: "Device",
-    serialNumber: "WIN-SIM-001",
-    oui: "00E0FC",
-    productClass: "WindowsSimulator"
-  },
   acs: {
     url: "http://10.10.10.2:7547/acs",
     user: "",
@@ -127,11 +119,25 @@ const client = new CWMPSimulator({
     port: 7548,
     user: "",
     pass: ""
+  },
+  // It's all fleet: one group of one device (built-in TR-181 tree).
+  fleet: {
+    groups: [
+      {
+        count: 1,
+        device: {
+          rootName: "Device",
+          serialNumber: "WIN-SIM-001",
+          oui: "00E0FC",
+          productClass: "WindowsSimulator"
+        }
+      }
+    ]
   }
 });
 
 // Populate Data
-populateWindowsData(client._device);
+populateWindowsData(client._devices[0]);
 
 // Start
 client.start();

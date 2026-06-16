@@ -4,11 +4,10 @@
 // module reads the model files and produces a fully-resolved `CwmpSimulatorOptions`
 // (model *objects*) that the library consumes. The library never imports this.
 
-import { readFileSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
 import { parseCsvModel, parseJsonModel } from "./src/model/loader.ts";
-import type { LoadedModel, CwmpSimulatorOptions, CwmpDeviceOptions, FleetGroup } from "./src/types.ts";
-import type { CliOptions, CliDeviceOptions } from "./src/config/types.ts";
+import type { LoadedModel, CwmpFleetOptions, CwmpDeviceOptions, FleetGroup } from "./src/types.ts";
+import type { CliFleet, CliDeviceOptions } from "./src/config/types.ts";
 
 /** `default` / empty means "use the built-in tree" — no file is loaded. */
 function isBuiltIn(name?: string): boolean {
@@ -16,26 +15,22 @@ function isBuiltIn(name?: string): boolean {
 }
 
 /**
- * Resolves a model reference to a file path. An explicit `.csv`/`.json` path is
- * used as-is; a bare name is looked up under `dir` as `name.csv` then `name.json`.
+ * Loads a device model from a **file path** (`.csv` or `.json`, by extension),
+ * returning `{ root, tree }`. The path may be relative (to cwd) or absolute —
+ * each `--model` is an independent path, so models can live in any folder.
+ * Synchronous — read once at startup.
  */
-function resolveModelPath(nameOrPath: string, dir: string): string {
-  if (/\.(csv|json)$/i.test(nameOrPath)) return nameOrPath;
-  for (const ext of [".csv", ".json"]) {
-    const candidate = join(dir, nameOrPath + ext);
-    if (existsSync(candidate)) return candidate;
+export function loadModel(path: string): LoadedModel {
+  if (!/\.(csv|json)$/i.test(path)) {
+    throw new Error(`Model must be a .csv or .json file: '${path}'`);
   }
-  throw new Error(`Model not found: '${nameOrPath}' (looked in '${dir}' for .csv / .json)`);
-}
-
-/**
- * Loads a device model by name or path (CSV or JSON, by extension), returning
- * `{ root, tree }`. Synchronous — model files are read once at startup.
- */
-export function loadModel(nameOrPath: string, dir = "./models"): LoadedModel {
-  const file = resolveModelPath(nameOrPath, dir);
-  const text = readFileSync(file, "utf8");
-  return /\.json$/i.test(file) ? parseJsonModel(text) : parseCsvModel(text);
+  let text: string;
+  try {
+    text = readFileSync(path, "utf8");
+  } catch {
+    throw new Error(`Model file not found: '${path}'`);
+  }
+  return /\.json$/i.test(path) ? parseJsonModel(text) : parseCsvModel(text);
 }
 
 /** Maps CLI device inputs to library device options (drops the `modelName` string). */
@@ -45,34 +40,28 @@ function toDevice(cli: CliDeviceOptions): CwmpDeviceOptions {
 }
 
 /**
- * Bridges the CLI's parsed `CliOptions` to a resolved `CwmpSimulatorOptions`:
- * loads each group's model file (once per distinct name) into `group.model`, and
- * strips every CLI-only field. The returned object is pure data the library
- * consumes — `new CWMPSimulator(toSimulatorOptions(buildOptions(...)))`.
+ * Resolves a parsed CLI fleet into the library's `CwmpFleetOptions`: loads each
+ * group's model **file** (once per distinct path) into `group.model` and strips
+ * CLI-only fields (`modelName`). Returns **only the fleet** — the caller composes
+ * the full `CwmpSimulatorOptions` from the CLI's `conn`/`acs`/`log`. The library
+ * reads no files; this is where model paths become objects.
  */
-export function toSimulatorOptions(cli: CliOptions): CwmpSimulatorOptions {
-  const dir = cli.fleet?.modelsDir ?? "./models";
+export function resolveFleet(fleet?: CliFleet): CwmpFleetOptions {
   const cache = new Map<string, LoadedModel>();
-  const load = (name: string): LoadedModel => {
-    let model = cache.get(name);
+  const load = (path: string): LoadedModel => {
+    let model = cache.get(path);
     if (!model) {
-      model = loadModel(name, dir);
-      cache.set(name, model);
+      model = loadModel(path);
+      cache.set(path, model);
     }
     return model;
   };
 
-  const groups: FleetGroup[] = (cli.fleet?.groups ?? []).map((g) => ({
+  const groups: FleetGroup[] = (fleet?.groups ?? []).map((g) => ({
     count: g.count,
     device: toDevice(g.device),
     model: isBuiltIn(g.device.modelName) ? undefined : load(g.device.modelName!),
   }));
 
-  return {
-    device: toDevice(cli.device),
-    conn: cli.conn,
-    acs: cli.acs,
-    log: cli.log,
-    fleet: { count: cli.fleet?.count, bootDelay: cli.fleet?.bootDelay, groups },
-  };
+  return { bootDelay: fleet?.bootDelay, index: fleet?.index, groups };
 }

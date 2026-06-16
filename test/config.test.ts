@@ -9,7 +9,7 @@ test("buildOptions reads env and applies CLI overrides", () => {
   );
 
   assert.equal(options.acs.url, "http://acs/");
-  assert.equal(options.device.serialNumber, "CLI1");
+  assert.equal(options.fleet?.groups?.[0].device.serialNumber, "CLI1");
   assert.equal(options.conn.port, 9000);
 });
 
@@ -25,14 +25,15 @@ test("buildOptions rejects an invalid log level", () => {
 
 test("buildOptions keeps identity templates raw (resolved per-device at construction)", () => {
   const o = buildOptions({}, ["--serial", "SIM-{i}", "--mac", "AA:{i:02}", "--index", "7"]);
-  assert.equal(o.device.serialNumber, "SIM-{i}"); // raw — the device stamps its index
-  assert.equal(o.device.mac, "AA:{i:02}");
-  assert.equal(o.device.index, 7);
+  const g = o.fleet?.groups?.[0];
+  assert.equal(g?.device.serialNumber, "SIM-{i}"); // raw — the device stamps its index
+  assert.equal(g?.device.mac, "AA:{i:02}");
+  assert.equal(o.fleet?.index, 7); // base index is fleet-level now
 });
 
-test("buildOptions parses fleet count and boot delay", () => {
-  assert.equal(buildOptions({}, []).fleet?.count, 1);
-  assert.equal(buildOptions({}, ["--count", "5"]).fleet?.count, 5);
+test("buildOptions parses per-group count, fleet index, and boot delay", () => {
+  assert.equal(buildOptions({}, []).fleet?.groups?.[0].count, 1);
+  assert.equal(buildOptions({}, ["--count", "5"]).fleet?.groups?.[0].count, 5);
   assert.equal(buildOptions({ FLEET_BOOT_DELAY: "250" }, []).fleet?.bootDelay, 250);
 });
 

@@ -9,13 +9,13 @@ function makeDevice() {
   return new CWMPDevice({ rootName: "InternetGatewayDevice", serialNumber: "SN-1" });
 }
 
-function makeSim(over: Record<string, unknown> = {}) {
+function makeSim(over: Record<string, any> = {}) {
+  const { count = 2, ...rest } = over;
   return new CWMPSimulator({
-    device: { rootName: "InternetGatewayDevice", serialNumber: "SN-{i}" },
     conn: { port: 0 },
     acs: { url: "http://127.0.0.1:7547/" },
-    fleet: { count: 2 },
-    ...over,
+    fleet: { groups: [{ count, device: { rootName: "InternetGatewayDevice", serialNumber: "SN-{i}" } }] },
+    ...rest,
   } as any);
 }
 
@@ -169,7 +169,7 @@ test("stop() saves devices with unsaved changes only", () => {
 });
 
 test("simulator forwards device load as device:load", () => {
-  const sim = makeSim({ fleet: { count: 1 } });
+  const sim = makeSim({ count: 1 });
   let loaded: { dev?: CWMPDevice; state?: SavedState } = {};
   sim.on("device:load", (dev: CWMPDevice, state: SavedState) => { loaded = { dev, state }; });
   const st: SavedState = { params: { [PROVCODE]: { value: "L", type: "xsd:string" } } };
@@ -180,7 +180,7 @@ test("simulator forwards device load as device:load", () => {
 
 test("loadState provider applies saved state at boot (per serial)", () => {
   const st: SavedState = { params: { [PROVCODE]: { value: "FROM-STORE", type: "xsd:string" } } };
-  const sim = makeSim({ fleet: { count: 1 }, loadState: (s: string) => (s === "SN-0" ? st : undefined) });
+  const sim = makeSim({ count: 1, loadState: (s: string) => (s === "SN-0" ? st : undefined) });
   const d = sim._devices[0];
   assert.notEqual(d.getValue(PROVCODE), "FROM-STORE");
   sim._applyLoadedState(d);

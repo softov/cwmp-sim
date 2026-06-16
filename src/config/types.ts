@@ -1,11 +1,11 @@
 import type { CwmpConnOptions, CwmpAcsOptions, CwmpLogOptions } from "../types.ts";
 
 // The CLI's own option shape — what `buildOptions(argv, env)` produces. It holds
-// raw, unresolved CLI inputs (model *names*/paths, a storage dir — strings); it
-// reads no files. The binary turns this into a fully-resolved
-// `CwmpSimulatorOptions` (model *objects*) via `toSimulatorOptions`.
+// raw, unresolved CLI inputs (model *path* strings, a storage dir); it reads no
+// files. The binary resolves the fleet (loads model files) via `resolveFleet`
+// and composes the library's `CwmpSimulatorOptions`.
 
-/** Device-type CLI inputs for one group (or the base). `modelName` is unresolved. */
+/** Device-type CLI inputs for one group. `modelName` is an unresolved file path. */
 export type CliDeviceOptions = {
   manufacturer?: string;
   rootName?: string;
@@ -13,8 +13,7 @@ export type CliDeviceOptions = {
   productClass?: string;
   serialNumber?: string;
   mac?: string;
-  index?: number;
-  /** Model name or path to load (resolved to a `LoadedModel` by the binary). */
+  /** Path to a `.csv`/`.json` model file (resolved to a `LoadedModel` by the binary). */
   modelName?: string;
 };
 
@@ -24,19 +23,22 @@ export type CliFleetGroup = {
   device: CliDeviceOptions;
 };
 
-/** The parsed-but-unresolved CLI configuration. */
+/** The fleet as parsed from the CLI (model paths unresolved). */
+export type CliFleet = {
+  bootDelay?: number;
+  index?: number;
+  groups?: CliFleetGroup[];
+};
+
+/**
+ * The parsed-but-unresolved CLI configuration. Like the library, it's all
+ * **fleet** — there is no standalone `device`; a single device is one group.
+ */
 export type CliOptions = {
-  device: CliDeviceOptions;
   conn: CwmpConnOptions;
   acs: CwmpAcsOptions;
   log?: CwmpLogOptions;
-  fleet?: {
-    count?: number;
-    bootDelay?: number;
-    /** Directory to resolve model names from (default `./models`). */
-    modelsDir?: string;
-    groups?: CliFleetGroup[];
-  };
+  fleet?: CliFleet;
   /** Directory for per-device state files (the binary reads/writes here). */
   storageDir?: string;
 };

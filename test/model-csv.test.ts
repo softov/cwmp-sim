@@ -110,19 +110,20 @@ test("jsonToTree converts plain values into CWMP leaves and infers types", () =>
 
 // --- loadModel (shipped example files) ---
 
-test("loadModel loads the shipped CSV model by name", () => {
-  const { root, tree } = loadModel("generic-tr098", MODELS_DIR);
+test("loadModel loads a CSV model from a file path", () => {
+  const { root, tree } = loadModel(path.join(MODELS_DIR, "generic-tr098.csv"));
   assert.equal(root, "InternetGatewayDevice");
   assert.equal(tree.InternetGatewayDevice.DeviceInfo.Manufacturer._value, "Generic");
   assert.equal(tree.InternetGatewayDevice.LANDevice["1"].WLANConfiguration["1"].SSID._writable, true);
 });
 
-test("loadModel loads the shipped JSON model by name", () => {
-  const { root, tree } = loadModel("generic-tr181", MODELS_DIR);
+test("loadModel loads a JSON model from a file path", () => {
+  const { root, tree } = loadModel(path.join(MODELS_DIR, "generic-tr181.json"));
   assert.equal(root, "Device");
   assert.equal(tree.Device.DeviceInfo.ProductClass._value, "GenericTR181");
 });
 
-test("loadModel throws a helpful error for an unknown model", () => {
-  assert.throws(() => loadModel("does-not-exist", MODELS_DIR), /Model not found/);
+test("loadModel throws for a missing file and for a non-csv/json path", () => {
+  assert.throws(() => loadModel(path.join(MODELS_DIR, "nope.csv")), /Model file not found/);
+  assert.throws(() => loadModel(path.join(MODELS_DIR, "generic-tr098.txt")), /must be a \.csv or \.json/);
 });

@@ -25,14 +25,9 @@ export default class CWMPSimulator extends EventEmitter {
   /** Running identity index, incremented across every device of every group. */
   _nextIndex = 0;
 
-  /** Back-compat accessor: the first device (single-device callers / CLI SIGINT). */
-  get _device(): CWMPDevice {
-    return this._devices[0];
-  }
-
   /**
    * Builds the fleet from `fleet.groups` (or a single implicit group derived
-   * from `fleet.count`), each device configured against the ACS.
+   * default group), each device configured against the ACS.
    * @param {object} options - Configuration options.
    */
   constructor(options: CwmpSimulatorOptions) {
@@ -44,11 +39,12 @@ export default class CWMPSimulator extends EventEmitter {
     this._log = options.log?.logger
       ?? createLogger({ level: options.log?.level, prefix: options.log?.prefix, sink: options.log?.sink });
 
-    this._nextIndex = options.device?.index ?? 0;
+    this._nextIndex = options.fleet?.index ?? 0;
 
+    // It's all fleet: a single default device is a fleet of one default group.
     const groups: FleetGroup[] = options.fleet?.groups?.length
       ? options.fleet.groups
-      : [{ count: Math.max(1, options.fleet?.count ?? 1), device: options.device, model: options.device?.model }];
+      : [{ count: 1, device: {} }];
 
     for (const group of groups) this.addGroup(group);
   }

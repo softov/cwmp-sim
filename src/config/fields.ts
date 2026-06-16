@@ -51,7 +51,7 @@ export const configFields: ConfigField<unknown>[] = [
     path: "device.modelName",
     env: "DEVICE_MODEL",
     flag: "--model",
-    label: "Model name or path (opens a device group); a .csv/.json path or a name under the models dir. Omit / 'default' = built-in tree",
+    label: "Path to a .csv/.json model file (opens a device group). Omit / 'default' = built-in tree",
     default: "",
     parse: asString,
     scope: "group"
@@ -102,7 +102,7 @@ export const configFields: ConfigField<unknown>[] = [
     scope: "group"
   },
   {
-    path: "device.index",
+    path: "fleet.index",
     env: "DEVICE_INDEX",
     flag: "--index",
     label: "Fleet base index (resolves {i} in serial/oui/mac; increments across all devices)",
@@ -218,14 +218,6 @@ export const configFields: ConfigField<unknown>[] = [
     label: "Delay (ms) between device boots",
     default: 1000,
     parse: asInt
-  },
-  {
-    path: "fleet.modelsDir",
-    env: "MODELS_DIR",
-    flag: "--models-dir",
-    label: "Directory to resolve model names from",
-    default: "./models",
-    parse: asString
   },
   {
     path: "storageDir",

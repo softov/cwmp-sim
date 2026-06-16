@@ -95,16 +95,23 @@ export type FleetGroup = {
 };
 
 export type CwmpFleetOptions = {
-  /** Number of devices to simulate when no `groups` are given (default 1). */
-  count?: number;
   /** Delay in ms between each device's boot, to stagger Informs (default 1000). */
   bootDelay?: number;
-  /** Fleet composition: one entry per device group (mixed types). When set, supersedes `count`. */
+  /** Base identity index — the global `{i}` counter starts here (default 0). */
+  index?: number;
+  /**
+   * Fleet composition: one entry per device group (mixed types). Empty/omitted →
+   * a single default device (one group, built-in model, no file).
+   */
   groups?: FleetGroup[];
 };
 
+/**
+ * The simulator runs a **fleet** — there is no standalone "device" option; a
+ * single device is simply a fleet of one default group. Device-type options live
+ * inside each `fleet.groups[].device`.
+ */
 export type CwmpSimulatorOptions = {
-  device: CwmpDeviceOptions;
   conn: CwmpConnOptions;
   acs: CwmpAcsOptions;
   log?: CwmpLogOptions;

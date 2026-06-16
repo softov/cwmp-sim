@@ -108,26 +108,30 @@ export function buildOptions(
   const groupFlags = new Set(groupFields.map((f) => f.flag).filter(Boolean) as string[]);
 
   const { globalArgs, segments } = readGrouped(argv, groupFlags);
-  const base = segments[0];
+  const baseSeg = segments[0];
 
-  // Base options: global fields (any position) + group fields resolved from the
-  // base segment. `options.device` / `options.fleet.count` act as the defaults
-  // inherited by every group and back the single-group fallback.
+  // Global (non-group) options → the returned object (conn/acs/log/storageDir/fleet.{index,bootDelay}).
   const options: Record<string, any> = {};
   for (const field of globalFields) setPath(options, field.path, resolveField(field, env, globalArgs));
-  for (const field of groupFields) setPath(options, field.path, resolveField(field, env, base));
 
-  // Explicit groups: one per `--model` segment, inheriting base then overriding.
-  const explicit = segments.slice(1);
-  const groups: CliFleetGroup[] = explicit.map((seg) => {
+  // Base group-field values (inherited by every group; not part of the output).
+  const base: Record<string, any> = {};
+  for (const field of groupFields) setPath(base, field.path, resolveField(field, env, baseSeg));
+  const groupOf = (seg?: Map<string, string>): CliFleetGroup => {
     const tmp: Record<string, any> = {};
-    for (const field of groupFields) setPath(tmp, field.path, resolveField(field, env, base, seg));
+    for (const field of groupFields) setPath(tmp, field.path, resolveField(field, env, baseSeg, seg));
     return { count: tmp.fleet?.count ?? 1, device: tmp.device ?? {} };
-  });
+  };
 
-  // No `--model` → a single implicit group from the base options.
-  options.fleet.groups =
-    groups.length > 0 ? groups : [{ count: options.fleet.count ?? 1, device: options.device }];
+  // Each `--model` segment is a group; with none, a single group from the base.
+  const explicit = segments.slice(1);
+  const groups: CliFleetGroup[] =
+    explicit.length > 0
+      ? explicit.map((seg) => groupOf(seg))
+      : [{ count: base.fleet?.count ?? 1, device: base.device ?? {} }];
+
+  options.fleet ??= {};
+  options.fleet.groups = groups;
 
   return options as CliOptions;
 }
