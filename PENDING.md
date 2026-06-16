@@ -9,7 +9,7 @@ Broadband Forum conformance implementation. This document tracks current gaps
 - [ ] **`ScheduleInform`** stores the requested schedule but does not start a timer for the future inform.
 - [ ] **`ScheduleDownload`** adds a queued transfer entry but does not execute the scheduled download.
 - [ ] **`CancelTransfer`** removes queued entries but does not abort an already-running HTTP request.
-- [ ] **CSV import/export** is not fully implemented. `DEVICE_CSV` is accepted and `exportCSV()` is called on `SIGINT`, but the current export function is a placeholder.
+- [ ] **CSV/JSON _export_** (dump a live device's tree to a file) is not implemented. _Import_ now is: `--model <name|path.csv|path.json>` loads a device model; the old `DEVICE_CSV`/`exportCSV()` placeholder was removed.
 - [ ] **Upload tasks** expect local files such as `./sample/firmware.bin`, `./sample/web-content.tar`, `./sample/vendor-config.xml`, and `./sample/vendor-log.txt`; these must exist for those upload file types to succeed.
 - [ ] **FTP and TFTP transfers** are not implemented; transfer tasks use HTTP/HTTPS only.
 - [ ] **HTTPS Connection Request mode** is present in the code path, but certificate/key handling is not implemented.
@@ -24,7 +24,7 @@ Forward-looking enhancements (items that are *current gaps* live under Known lim
 - [x] 1. **Multi-device mode** — `--count N` runs N self-running CPEs in one process behind a single shared `CWMPConn`, path-routed by `/{hash}`. See `roadmap/plans/fleet/01-multi-device-runtime.md`. **(L, high-impact)**
 - [x] 2. **Serial/MAC offset + templating** — identity fields support `{i}`/`{i:04}`/`{i+N}`/`{i:02x}`, resolved per-device from its index. See `roadmap/plans/enhancements/01-pre-fleet-enhancements-p3-serial-mac-templating.md`. **(S)**
 - [x] 3. **Staggered boot / inform jitter** — `--boot-delay` spaces each device's boot so N devices don't hammer the ACS at once (part of the fleet runtime). **(S)**
-- [ ] 4. **CSV/JSON fleet definition** — one file describing many devices (paraam's `agent.csv` model). **(M)**
+- [x] 4. **Fleet definition** — mixed-type fleets via **grouped flags**: each `--model <name|default>` opens a device group, group-scoped flags bind to it, global flags apply fleet-wide. See `roadmap/plans/fleet/02-device-templates.md` (Phase 3). _(A single `config.json` source — describing the whole fleet in one file — is a deliberate future option, not done here.)_ **(M)**
 
 ### B. Connection Request mechanisms (currently HTTP + Digest only)
 - [ ] 5. **STUN-based connection requests** (TR-069 Annex G) — for CPEs behind NAT. **(M)**
@@ -37,7 +37,7 @@ Forward-looking enhancements (items that are *current gaps* live under Known lim
 - [ ] 10. **Fault injection** — make any RPC return a configured CWMP fault, or simulate offline/timeout/reboot-loop, to exercise ACS error handling. **(M, very useful)**
 
 ### D. Data model
-- [ ] 11. **Bundled realistic device profiles** — ship vendor-flavored TR-181/TR-098 fixtures (`models/` + `sample/`). **(S–M)**
+- [ ] 11. **Bundled realistic device profiles** — ship vendor-flavored TR-181/TR-098 fixtures (`models/` + `sample/`). _Partial:_ the loader + `models/generic-tr098.csv` / `generic-tr181.json` ship (fleet/02); vendor-flavored (ZTE/Huawei) dumps still to add. **(S–M)**
 - [ ] 12. **TR-181 Device:2 coverage expansion** — WiFi.Radio, Hosts, Ethernet, DHCP, etc. **(L)**
 
 ### E. Modern protocols

@@ -15,6 +15,8 @@ import methods from "./cwmp-methods.ts";
 import soap from "./cwmp-soap.ts";
 import xmlParser from "./xml-parser.ts";
 import { applyTemplate } from "./config/template.ts";
+import type { SavedState } from "./types.ts";
+import { EventEmitter } from "node:events";
 import * as crypto from "node:crypto";
 
 /**
@@ -42,6 +44,10 @@ export default class CWMPDevice {
   _rootTree: any;
   _params!: CwmpParams;
   _keepEvents = false;
+  /** True when the device holds unsaved param changes (set by mutations, cleared on save/boot). */
+  _dirty = false;
+  /** Lifecycle event bus (`save` / `load`); the simulator forwards these as `device:*`. */
+  _events = new EventEmitter();
   listeners: Map<string, Set<Function>>;
   _pendingReboot = false;
   _pendingFactoryReset = false;
@@ -116,6 +122,7 @@ export default class CWMPDevice {
     this._params = new CwmpParams(
       this._rootTree,
       (event, path, data) => {
+        this._dirty = true;
         if (!this._keepEvents) this.fireEvent(event, path, data);
       },
       this._log
@@ -265,6 +272,73 @@ export default class CWMPDevice {
     return (this._connHash ??= hashConnectionPath(this._serialNumber));
   }
 
+  // --- State persistence (the device serializes; storage is the caller's job) ---
+
+  /**
+   * Serializes the device's persistable state: every **writable** leaf (the
+   * surface an ACS can change) keyed by full path, plus any SetParameterAttributes.
+   * Read-only/structural params are omitted — they come from the model on reload.
+   * @returns {SavedState} JSON-serializable state.
+   */
+  exportState(): SavedState {
+    const params: SavedState["params"] = {};
+    for (const leaf of this.getLeaves(this._rootName)) {
+      if (leaf.writable) params[leaf.name] = { value: leaf.value, type: leaf.type };
+    }
+
+    const state: SavedState = { params };
+
+    if (this._parameterAttributes.size) {
+      const attributes: NonNullable<SavedState["attributes"]> = {};
+      for (const [path, attr] of this._parameterAttributes) {
+        attributes[path] = { notification: attr.notification, accessList: [...attr.accessList] };
+      }
+      state.attributes = attributes;
+    }
+
+    return state;
+  }
+
+  /**
+   * Restores a previously-saved state onto the current tree (force-set, so it
+   * wins over model defaults and recreates absent leaves). Run after the model +
+   * identity are in place; read-only identity (serial/OUI) is untouched since it
+   * isn't part of writable state. Emits `load`.
+   * @param {SavedState} state - State from a prior `exportState()`.
+   */
+  importState(state: SavedState | null | undefined): void {
+    if (!state) return;
+
+    for (const [path, leaf] of Object.entries(state.params ?? {})) {
+      this.set(path, leaf.value, true);
+      const node = this.findNode(path);
+      if (node && (node as any)._type === undefined) (node as any)._type = leaf.type;
+    }
+
+    if (state.attributes) {
+      for (const [path, attr] of Object.entries(state.attributes)) {
+        this._parameterAttributes.set(path, {
+          notification: attr.notification,
+          accessList: [...attr.accessList],
+        });
+      }
+    }
+
+    this._events.emit("load", this, state);
+  }
+
+  /**
+   * Snapshots the state, clears the dirty flag, and emits `save` (with the state)
+   * so a caller can persist it. The library itself performs no I/O.
+   * @returns {SavedState} the snapshot that was emitted.
+   */
+  saveState(): SavedState {
+    const state = this.exportState();
+    this._dirty = false;
+    this._events.emit("save", this, state);
+    return state;
+  }
+
   // --- CWMP session (outbound: the CPE talks to the ACS) ---
 
   /**
@@ -288,6 +362,10 @@ export default class CWMPDevice {
         this._periodicInformDisabled = true;
       });
     }
+    // Clean baseline at boot: construction/setup writes (identity, MAC, ACS config)
+    // and any state loaded via importState() are re-derivable, so they're not
+    // "unsaved". Only changes from here (the ACS session) mark the device dirty.
+    this._dirty = false;
     this.startSession(event);
   }
 

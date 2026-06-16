@@ -3,6 +3,19 @@ import type { Logger, LogLevel, LoggerSink } from "./logger.ts";
 /** Parsed model: the inferred root key (`Device` / `InternetGatewayDevice`) + the tree. */
 export type LoadedModel = { root: string; tree: Record<string, any> };
 
+/**
+ * A device's persistable state — the writable parameter values it has accumulated
+ * (e.g. what an ACS set), plus any SetParameterAttributes. Read-only/structural
+ * params are not stored; they come deterministically from the model on reload.
+ * Keyed by full parameter path. JSON-serializable.
+ */
+export type SavedState = {
+  /** Writable leaf values keyed by full path (includes ManagementServer.ParameterKey, itself writable). */
+  params: Record<string, { value: string; type: string }>;
+  /** Persisted SetParameterAttributes (notification + access list) keyed by path. */
+  attributes?: Record<string, { notification: number; accessList: string[] }>;
+};
+
 export type XmlNode = {
   name: string;
   namespace: string;
