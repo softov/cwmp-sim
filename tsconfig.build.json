@@ -4,6 +4,9 @@
     "src/**/*",
     "main.ts",
     "storage.ts",
-    "models.ts"
+    "models.ts",
+    "dashboard.ts",
+    "dashboard.html",
+    "ws.ts"
   ]
 }

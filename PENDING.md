@@ -48,7 +48,7 @@ Forward-looking enhancements (items that are *current gaps* live under Known lim
 
 ### F. Developer experience & observability
 - [x] 15. **SOAP wire-log / envelope dump** — delivered via the logging subsystem: SOAP envelopes log at `trace` (`--log-level trace`). See `roadmap/plans/enhancements/02-logging-subsystem.md`.
-- [ ] 16. **Web dashboard / REST control API** — start/stop devices, trigger informs, set params at runtime. **(L)**
+- [x] 16. **Web dashboard / REST control API** — `--dashboard` serves a binary-side HTTP server (root `dashboard.ts`): REST control (add/remove/restart groups, reboot/remove/inform/set-param) + a hand-rolled RFC-6455 WebSocket live feed of the `device:*` bus + one self-contained HTML page (vanilla JS, **zero deps**). See `roadmap/plans/dashboard/01-dashboard.md`. **(L)**
 - [ ] 17. **Scriptable scenarios** — JSON/YAML script of "boot → wait → expect SPV → assert" (like AX INTEROP / CDRouter). **(L)**
 - [x] 18. **Library/SDK API** — `src/index.ts` exports `CWMPSimulator`/`CWMPDevice` + option types; `package.json` `main`/`types`/`exports` point at it; the device is self-running and importable. See `roadmap/plans/architecture/01-entry-lib-refactor.md`. **(M)**
 

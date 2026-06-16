@@ -226,5 +226,29 @@ export const configFields: ConfigField<unknown>[] = [
     label: "Directory for per-device state files (<serial>.json)",
     default: "~/.cwmp-sim/devices",
     parse: asString
+  },
+  {
+    path: "dashboard",
+    env: "DASHBOARD",
+    flag: "--dashboard",
+    label: "Enable the web dashboard + control API",
+    default: false,
+    parse: asBool
+  },
+  {
+    path: "dashboardPort",
+    env: "DASHBOARD_PORT",
+    flag: "--dashboard-port",
+    label: "Dashboard port",
+    default: 8080,
+    parse: asInt
+  },
+  {
+    path: "dashboardHost",
+    env: "DASHBOARD_HOST",
+    flag: "--dashboard-host",
+    label: "Dashboard bind host",
+    default: "127.0.0.1",
+    parse: asString
   }
 ] satisfies ConfigField<unknown>[];

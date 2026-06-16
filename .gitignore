@@ -141,3 +141,6 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Codegen artifact (generated from dashboard.html by gen-html.mjs)
+dashboard.generated.ts

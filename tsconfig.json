@@ -21,7 +21,9 @@
     "test/**/*",
     "main.ts",
     "storage.ts",
-    "models.ts"
+    "models.ts",
+    "dashboard.ts",
+    "ws.ts"
   ],
   "exclude": [
     "node_modules"

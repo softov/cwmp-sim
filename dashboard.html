@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>cwmp-sim dashboard</title>
+  <style>
+    :root {
+      --bg: #020617;
+      --panel: #0b1220;
+      --accent: #4ec9b0;
+      --fg: #cbd5e1;
+      --muted: #64748b;
+      --line: #1e293b
+    }
+
+    * {
+      box-sizing: border-box
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: .55rem 1rem;
+      border-bottom: 1px solid var(--line)
+    }
+
+    header h1 {
+      font-size: 14px;
+      margin: 0;
+      color: var(--accent)
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--muted);
+      display: inline-block
+    }
+
+    .dot.on {
+      background: var(--accent)
+    }
+
+    main {
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      grid-template-rows: 1fr 210px;
+      height: calc(100vh - 46px)
+    }
+
+    #fleet {
+      border-right: 1px solid var(--line);
+      overflow: auto;
+      padding: .5rem
+    }
+
+    #device {
+      overflow: auto;
+      padding: 1rem
+    }
+
+    #feed {
+      grid-column: 1/3;
+      border-top: 1px solid var(--line);
+      overflow: auto;
+      padding: .5rem 1rem;
+      background: var(--panel)
+    }
+
+    .group {
+      margin-bottom: .6rem
+    }
+
+    .ghead {
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: .2rem;
+      display: flex;
+      align-items: center;
+      gap: .3rem;
+      flex-wrap: wrap
+    }
+
+    .device {
+      padding: .15rem .4rem;
+      cursor: pointer;
+      border-radius: 3px
+    }
+
+    .device:hover {
+      background: var(--panel)
+    }
+
+    .device.sel {
+      background: var(--accent);
+      color: var(--bg)
+    }
+
+    button {
+      background: transparent;
+      color: var(--accent);
+      border: 1px solid var(--line);
+      border-radius: 3px;
+      padding: .08rem .4rem;
+      cursor: pointer;
+      font: inherit
+    }
+
+    button:hover {
+      border-color: var(--accent)
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse
+    }
+
+    td {
+      border-bottom: 1px solid var(--line);
+      padding: .2rem .4rem;
+      vertical-align: top
+    }
+
+    td:first-child {
+      color: var(--muted);
+      width: 55%;
+      word-break: break-all
+    }
+
+    input {
+      background: var(--bg);
+      color: var(--fg);
+      border: 1px solid var(--line);
+      border-radius: 3px;
+      padding: .1rem .3rem;
+      font: inherit;
+      width: 100%
+    }
+
+    .ro {
+      color: var(--muted)
+    }
+
+    .muted {
+      color: var(--muted)
+    }
+
+    .actions {
+      margin: .5rem 0;
+      display: flex;
+      gap: .4rem
+    }
+
+    .ev {
+      white-space: pre-wrap
+    }
+
+    .ev .t {
+      color: var(--accent)
+    }
+
+    form.add {
+      display: flex;
+      gap: .3rem;
+      margin-left: auto
+    }
+
+    form.add input {
+      width: auto
+    }
+
+    h2 {
+      font-size: 14px;
+      color: var(--accent);
+      margin: .2rem 0 .6rem
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1>cwmp-sim</h1>
+    <span><span class="dot" id="status"></span> <span id="statustext" class="muted">connecting</span></span>
+    <form class="add" id="addform">
+      <input id="g-model" placeholder="model path (blank=default)" size="26">
+      <input id="g-serial" value="SIM-{i}" size="12">
+      <input id="g-count" type="number" value="1" min="1" style="width:58px">
+      <button>add group</button>
+    </form>
+  </header>
+  <main>
+    <div id="fleet"></div>
+    <div id="device">
+      <p class="muted">select a device</p>
+    </div>
+    <div id="feed"></div>
+  </main>
+  <script>
+    var $ = function (s) { return document.querySelector(s) };
+    var api = function (p) { return fetch(p).then(function (r) { return r.json() }) };
+    var selected = null;
+    function btn(label, fn) { var b = document.createElement('button'); b.textContent = label; b.onclick = fn; return b }
+    function act(path, method, body) { var o = { method: method }; if (body) { o.headers = { 'content-type': 'application/json' }; o.body = JSON.stringify(body) } return fetch(path, o).then(function (r) { loadFleet(); return r }) }
+    function enc(s) { return encodeURIComponent(s) }
+
+    function loadFleet() { api('/api/fleet').then(renderFleet) }
+    function renderFleet(f) {
+      var root = $('#fleet'); root.innerHTML = '';
+      f.groups.forEach(function (g) {
+        var box = document.createElement('div'); box.className = 'group';
+        var head = document.createElement('div'); head.className = 'ghead';
+        head.append(g.id + ' × ' + g.count + ' ',
+          btn('restart', function () { act('/api/groups/' + g.id + '/restart', 'POST') }),
+          btn('remove', function () { act('/api/groups/' + g.id, 'DELETE') }));
+        box.append(head);
+        g.devices.forEach(function (s) {
+          var d = document.createElement('div'); d.className = 'device' + (s === selected ? ' sel' : ''); d.textContent = s;
+          d.onclick = function () { selectDevice(s) }; box.append(d);
+        });
+        root.append(box);
+      });
+    }
+
+    function selectDevice(serial) {
+      selected = serial;
+      document.querySelectorAll('.device').forEach(function (e) { e.classList.toggle('sel', e.textContent === serial) });
+      api('/api/devices/' + enc(serial)).then(function (d) {
+        var panel = $('#device'); panel.innerHTML = '';
+        var h = document.createElement('h2'); h.textContent = serial + ' ';
+        var rt = document.createElement('span'); rt.className = 'muted'; rt.textContent = '(' + d.root + ')'; h.append(rt);
+        var actions = document.createElement('div'); actions.className = 'actions';
+        actions.append(
+          btn('inform', function () { act('/api/devices/' + enc(serial) + '/inform', 'POST') }),
+          btn('reboot', function () { act('/api/devices/' + enc(serial) + '/reboot', 'POST') }),
+          btn('remove', function () { removeDev(serial) }));
+        var table = document.createElement('table');
+        d.params.forEach(function (p) {
+          var tr = document.createElement('tr');
+          var td1 = document.createElement('td'); td1.textContent = p.name;
+          var td2 = document.createElement('td');
+          if (p.writable) { var inp = document.createElement('input'); inp.value = p.value; inp.addEventListener('change', function () { setParam(p.name, inp.value) }); td2.append(inp) }
+          else { var sp = document.createElement('span'); sp.className = 'ro'; sp.textContent = p.value; td2.append(sp) }
+          tr.append(td1, td2); table.append(tr);
+        });
+        panel.append(h, actions, table);
+      });
+    }
+    function setParam(path, value) { if (selected) act('/api/devices/' + enc(selected) + '/params', 'POST', { path: path, value: value }) }
+    function removeDev(serial) { act('/api/devices/' + enc(serial), 'DELETE').then(function () { if (selected === serial) { selected = null; $('#device').innerHTML = '<p class="muted">select a device</p>' } }) }
+
+    $('#addform').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var model = $('#g-model').value.trim();
+      var body = { count: (+$('#g-count').value) || 1, device: { serialNumber: $('#g-serial').value || undefined } };
+      if (model) body.model = model;
+      act('/api/groups', 'POST', body);
+    });
+
+    function feed(type, line) {
+      var f = $('#feed'); var div = document.createElement('div'); div.className = 'ev';
+      var t = document.createElement('span'); t.className = 't'; t.textContent = type;
+      div.append(t, ' ' + line); f.append(div); f.scrollTop = f.scrollHeight;
+      while (f.childElementCount > 300) f.removeChild(f.firstChild);
+    }
+    function connect() {
+      var ws = new WebSocket((location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/api/events');
+      ws.onopen = function () { $('#status').className = 'dot on'; $('#statustext').textContent = 'live' };
+      ws.onclose = function () { $('#status').className = 'dot'; $('#statustext').textContent = 'disconnected'; setTimeout(connect, 1500) };
+      ws.onmessage = function (e) {
+        var m = JSON.parse(e.data);
+        var extra = [m.event, m.phase, m.diagnostic].filter(Boolean).join(' ');
+        feed(m.type, m.serial + (extra ? ' ' + extra : ''));
+        if (m.type === 'device:add' || m.type === 'device:remove') loadFleet();
+      };
+    }
+    loadFleet(); connect();
+  </script>
+</body>
+
+</html>

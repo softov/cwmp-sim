@@ -35,6 +35,14 @@ Reference: [`00-fleet.md`](./fleet/00-fleet.md)
 | 03 | [Device state persistence](./fleet/03-device-state.md) | 🟢 Shipped | High | fleet/02 (🟢) |
 | 04 | [Dynamic control + event bus](./fleet/04-dynamic-control.md) | 🟢 Shipped | High | fleet/03 (🟢) |
 
+## dashboard
+
+Reference: [`00-dashboard.md`](./dashboard/00-dashboard.md)
+
+| # | Plan | Status | Priority | Dependencies |
+|---|------|--------|----------|--------------|
+| 01 | [Web dashboard + control API](./dashboard/01-dashboard.md) | 🟢 Shipped | Medium | fleet/04 (🟢) |
+
 ## docs
 
 Reference: [`00-docs.md`](./docs/00-docs.md)

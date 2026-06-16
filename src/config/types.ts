@@ -41,4 +41,10 @@ export type CliOptions = {
   fleet?: CliFleet;
   /** Directory for per-device state files (the binary reads/writes here). */
   storageDir?: string;
+  /** Enable the web dashboard (binary-side HTTP server). */
+  dashboard?: boolean;
+  /** Dashboard port (default 8080). */
+  dashboardPort?: number;
+  /** Dashboard bind host (default 127.0.0.1). */
+  dashboardHost?: string;
 };

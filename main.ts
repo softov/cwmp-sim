@@ -3,6 +3,7 @@ import { buildOptions, printHelp } from "./src/config/index.ts";
 import CWMPSimulator from "./src/cwmp-sim.ts";
 import { resolveFleet } from "./models.ts";
 import { resolveStorageDir, readState, writeState } from "./storage.ts";
+import { startDashboard } from "./dashboard.ts";
 import type { CwmpSimulatorOptions } from "./src/types.ts";
 
 const argv = process.argv.slice(2);
@@ -43,6 +44,12 @@ for (const g of groups) {
   const name = g.device?.modelName;
   const label = name && name.toLowerCase() !== "default" ? name : "default";
   console.log(`    - ${label} ×${g.count}`);
+}
+
+if (cli.dashboard) {
+  startDashboard(client, { port: cli.dashboardPort, host: cli.dashboardHost })
+    .then((dash) => console.log(`  Dashboard: ${dash.url}`))
+    .catch((err) => console.error(`  Dashboard failed: ${err?.message ?? err}`));
 }
 
 process.on("SIGINT", () => {

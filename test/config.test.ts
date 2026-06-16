@@ -49,6 +49,14 @@ test("buildOptions parses the storage dir: flag > env > default", () => {
   assert.equal(buildOptions({}, []).storageDir, "~/.cwmp-sim/devices");
 });
 
+test("buildOptions parses the dashboard flags", () => {
+  assert.equal(buildOptions({}, []).dashboard, false);
+  assert.equal(buildOptions({}, ["--dashboard"]).dashboard, true);
+  assert.equal(buildOptions({}, ["--dashboard-port", "9001"]).dashboardPort, 9001);
+  assert.equal(buildOptions({}, []).dashboardPort, 8080);
+  assert.equal(buildOptions({}, []).dashboardHost, "127.0.0.1");
+});
+
 test("grouped flags bind group-scoped flags to their --model; globals stay global", () => {
   const o = buildOptions({}, [
     "--port", "9000",

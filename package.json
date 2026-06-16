@@ -14,10 +14,15 @@
     "LICENSE"
   ],
   "scripts": {
+    "gen:html": "node gen-html.mjs",
+    "predev": "npm run gen:html",
     "dev": "node --import tsx --env-file=.env ./main.ts",
+    "prebuild": "npm run gen:html",
     "build": "tsc -p tsconfig.build.json",
     "start": "node --env-file=.env ./dist/main.js",
+    "precheck": "npm run gen:html",
     "check": "tsc --noEmit",
+    "pretest": "npm run gen:html",
     "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\"",
     "prepack": "npm run clean && npm run build",
     "prepublishOnly": "npm run check && npm run test",
