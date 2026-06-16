@@ -8,7 +8,6 @@ import soap from "./cwmp-soap.ts";
 import xmlParser from "./xml-parser.ts";
 import CwmpHttp from "./cwmp-http.ts";
 import type { CwmpSimulatorOptions } from './types.ts';
-import models from "./cwmp-model.ts";
 import { createLogger, NULL_LOGGER, type Logger } from "./logger.ts";
 /**
  * Orchestrates the simulated CPE.
@@ -40,6 +39,13 @@ export default class CWMPSimulator {
       ?? createLogger({ level: options.log?.level, prefix: options.log?.prefix, sink: options.log?.sink });
     this._log.debug(`Starting CWMP Client with config: ${JSON.stringify(options, null, 2)}`);
     this._device = new CWMPDevice({ ...options.device, logger: this._log });
+    this._device.configureManagementServer({
+      acsUrl: options.acs.url,
+      acsUser: options.acs.user,
+      acsPass: options.acs.pass,
+      crUser: options.conn.user,
+      crPass: options.conn.pass,
+    });
     this._httpClient = new CwmpHttp({
       method: 'POST',
       username: options.acs.user,
@@ -79,16 +85,7 @@ export default class CWMPSimulator {
     this._connectRequestServer.listenHTTP((event: string) => {
       this.startSession(event);
     }).then((connection: ConnectionRequest) => {
-      const r = this._device._rootName;
-      this._device._rootTree[r]['ManagementServer'] = models.merge(models.commonManagementServerParams, {
-        _writable: false,
-        'URL': { _value: this._options.acs.url, _type: 'xsd:string', _writable: true },
-        'Username': { _value: this._options.acs.user, _type: 'xsd:string', _writable: true },
-        'Password': { _value: this._options.acs.pass, _type: 'xsd:string', _writable: true },
-        'ConnectionRequestUsername': { _value: this._options.conn.user, _type: 'xsd:string', _writable: true },
-        'ConnectionRequestPassword': { _value: this._options.conn.pass, _type: 'xsd:string', _writable: true },
-        'ConnectionRequestURL': { _value: connection.url, _type: 'xsd:string', _writable: false },
-      })
+      this._device.setConnectionRequestURL(connection.url);
 
       this._log.info(`Connection server started on ${connection.url}`);
       this.startSession("1 BOOT");

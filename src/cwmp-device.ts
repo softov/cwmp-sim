@@ -2,7 +2,7 @@
 
 import models from "./cwmp-model.ts";
 import fs from "node:fs/promises";
-import type { CwmpNode, CwmpDeviceOptions } from './types.ts';
+import type { CwmpNode, CwmpDeviceOptions } from "./types.ts";
 import DiagPing from "./diag-ping.ts";
 import DiagTraceroute from "./diag-traceroute.ts";
 import DiagDownload from "./diag-download.ts";
@@ -10,15 +10,14 @@ import DiagUpload from "./diag-upload.ts";
 import DiagWifi from "./diag-wifi.ts";
 import CWMPTask from "./cwmp-task.ts";
 import { NULL_LOGGER, type Logger } from "./logger.ts";
+import CwmpParams from "./cwmp-params.ts";
 
 function inferXsdType(value: any): string {
-  if (typeof value === 'boolean') return 'xsd:boolean';
-  if (typeof value === 'number') {
-    return Number.isInteger(value)
-      ? 'xsd:int'
-      : 'xsd:float';
+  if (typeof value === "boolean") return "xsd:boolean";
+  if (typeof value === "number") {
+    return Number.isInteger(value) ? "xsd:int" : "xsd:float";
   }
-  return 'xsd:string';
+  return "xsd:string";
 }
 
 function convertObjectToCwmp(
@@ -32,18 +31,15 @@ function convertObjectToCwmp(
 
   for (const [key, value] of Object.entries(input)) {
     // recurse
-    if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+    if (value !== null && typeof value === "object" && !Array.isArray(value)) {
       internal[key] = convertObjectToCwmp(value, options);
       continue;
     }
 
-    const writable =
-      options?.writableKeys?.has(key) ??
-      options?.defaultWritable ??
-      false;
+    const writable = options?.writableKeys?.has(key) ?? options?.defaultWritable ?? false;
 
     internal[key] = {
-      _value: value === null ? '' : String(value),
+      _value: value === null ? "" : String(value),
       _type: inferXsdType(value),
       _writable: writable
     };
@@ -51,7 +47,6 @@ function convertObjectToCwmp(
 
   return internal;
 }
-
 
 /**
  * Represents the simulated CPE device.
@@ -69,9 +64,9 @@ export default class CWMPDevice {
   _mac: string = "";
   _rootName: string = "Device";
   _rootTree: any;
+  _params!: CwmpParams;
   _keepEvents = false;
   listeners: Map<string, Set<Function>>;
-  objectModels: Map<string, any>;
   _pendingReboot = false;
   _pendingFactoryReset = false;
   _pendingMessages: Function[] = [];
@@ -129,6 +124,16 @@ export default class CWMPDevice {
       this._rootTree = this.defaultTR181();
     }
 
+    // The parameter tree + structural ops live in CwmpParams; mutations report
+    // back here so the device's event bus (honoring _keepEvents) delivers them.
+    this._params = new CwmpParams(
+      this._rootTree,
+      (event, path, data) => {
+        if (!this._keepEvents) this.fireEvent(event, path, data);
+      },
+      this._log
+    );
+
     const loadJSON = async () => {
       // Load an optional JSON data-model fixture to overlay on the default tree.
       const jsonFile = this._jsonPath;
@@ -141,7 +146,7 @@ export default class CWMPDevice {
         if (!model[this._rootName]) return;
         // this._rootTree[this._rootName] = models.merge(this._rootTree[this._rootName], );
         this._rootTree[this._rootName] = convertObjectToCwmp(model[this._rootName], {
-          defaultWritable: true,
+          defaultWritable: true
           // writableKeys: new Set(['DiagnosticsState', 'DownloadURL', 'UploadURL', 'TestFileLength'])
         });
       } catch (e: any) {
@@ -151,7 +156,7 @@ export default class CWMPDevice {
           this._log.warn(`Error loading JSON file '${jsonFile}': ${e}`);
         }
       }
-    }
+    };
     loadJSON();
 
     // Internal State Flags
@@ -161,15 +166,12 @@ export default class CWMPDevice {
     // Listeners Map: Path -> Set of callbacks
     this.listeners = new Map();
 
-    // Object Models Map: Path Pattern -> Model Definition (Internal)
-    this.objectModels = new Map();
-
     this._diag = {
-      'ping': new DiagPing(this),
-      'traceroute': new DiagTraceroute(this),
-      'download': new DiagDownload(this),
-      'upload': new DiagUpload(this),
-      'wifi': new DiagWifi(this),
+      ping: new DiagPing(this),
+      traceroute: new DiagTraceroute(this),
+      download: new DiagDownload(this),
+      upload: new DiagUpload(this),
+      wifi: new DiagWifi(this)
     };
 
     this.applyMac();
@@ -181,13 +183,60 @@ export default class CWMPDevice {
    */
   applyMac(): void {
     if (!this._mac) return;
-    const macPaths = this._rootName === "InternetGatewayDevice"
-      ? ["InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANIPConnection.1.MACAddress"]
-      : ["Device.Ethernet.Interface.1.MACAddress"];
+    const macPaths =
+      this._rootName === "InternetGatewayDevice"
+        ? ["InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANIPConnection.1.MACAddress"]
+        : ["Device.Ethernet.Interface.1.MACAddress"];
     for (const path of macPaths) {
       const node = this.findNode(path);
       if (node && (node as any)._value !== undefined) this.set(path, this._mac, true);
     }
+  }
+
+  /**
+   * Configures the ManagementServer ACS URL + credentials and the Connection
+   * Request credentials in the data model. The device owns these parameters
+   * (single source of truth), so callers no longer poke the parameter tree.
+   */
+  configureManagementServer(cfg: {
+    acsUrl?: string;
+    acsUser?: string;
+    acsPass?: string;
+    crUser?: string;
+    crPass?: string;
+  }): void {
+    const ms = `${this._rootName}.ManagementServer`;
+    const apply = (leaf: string, value?: string) => {
+      if (value === undefined) return;
+      if (this.findNode(`${ms}.${leaf}`)) this.set(`${ms}.${leaf}`, value, true);
+    };
+    apply("URL", cfg.acsUrl);
+    apply("Username", cfg.acsUser);
+    apply("Password", cfg.acsPass);
+    apply("ConnectionRequestUsername", cfg.crUser);
+    apply("ConnectionRequestPassword", cfg.crPass);
+  }
+
+  /**
+   * Sets the Connection Request URL (assigned once the CR server binds).
+   * @param {string} url - The full CR URL advertised to the ACS.
+   */
+  setConnectionRequestURL(url: string): void {
+    const path = `${this._rootName}.ManagementServer.ConnectionRequestURL`;
+    if (this.findNode(path)) this.set(path, url, true);
+  }
+
+  /**
+   * Returns the device's current Connection Request credentials — the source of
+   * truth for authenticating incoming connection requests.
+   * @returns {{ user: string, pass: string }}
+   */
+  getCrCredentials(): { user: string; pass: string } {
+    const ms = `${this._rootName}.ManagementServer`;
+    return {
+      user: this.getValue(`${ms}.ConnectionRequestUsername`),
+      pass: this.getValue(`${ms}.ConnectionRequestPassword`)
+    };
   }
 
   /**
@@ -283,7 +332,7 @@ export default class CWMPDevice {
    * Retrieves all pending messages.
    * @returns {Function[]} List of message functions.
    */
-  getMessages() {
+  getMessages(): Function[] {
     return this._pendingMessages;
   }
 
@@ -293,7 +342,7 @@ export default class CWMPDevice {
    */
   getNextMessage() {
     if (!this._pendingMessages || this._pendingMessages.length === 0) return null;
-    this._log.debug('Get Next Message', this._pendingMessages.length);
+    this._log.debug("Get Next Message", this._pendingMessages.length);
     return this._pendingMessages.shift();
   }
 
@@ -304,18 +353,7 @@ export default class CWMPDevice {
    * @returns {CwmpNode|null} The found node or null.
    */
   findNode(path: string | null, create?: boolean): CwmpNode | null {
-    if (!path) return null;
-    const parts = path.split('.');
-    let current = this._rootTree;
-    for (const part of parts) {
-      if (part === "") continue;
-      if (!current[part]) {
-        if (create) current[part] = { _writable: true };
-        else return null;
-      }
-      current = current[part];
-    }
-    return current;
+    return this._params.findNode(path, create);
   }
 
   /**
@@ -324,11 +362,7 @@ export default class CWMPDevice {
    * @returns {CwmpNode|null} The found node or null.
    */
   get(path: string | null): CwmpNode | null {
-    const node = this.findNode(path);
-    if (node && node._value !== undefined) {
-      return node;
-    }
-    return null;
+    return this._params.get(path);
   }
 
   /**
@@ -337,8 +371,7 @@ export default class CWMPDevice {
    * @returns {string} The value or empty string if not found.
    */
   getValue(path: string | null): string {
-    const node = this.findNode(path);
-    return (node && node._value !== undefined) ? node._value : "";
+    return this._params.getValue(path);
   }
 
   /**
@@ -348,20 +381,7 @@ export default class CWMPDevice {
    * @returns {boolean} True if successful, false otherwise.
    */
   set(path: string | null, value: string, force?: boolean): boolean {
-    const node = this.findNode(path, force);
-    if (node && (force || node._value !== undefined)) {
-      if (node._writable || force) {
-        node._value = value;
-        this._log.debug(`Set ${path} to ${value}`);
-        if (typeof node.funcSet === 'function') {
-          node.funcSet();
-        }
-        if (this._keepEvents) return true;
-        this.fireEvent('set', path, value);
-        return true;
-      }
-    }
-    return false;
+    return this._params.set(path, value, force);
   }
 
   /**
@@ -370,34 +390,8 @@ export default class CWMPDevice {
    * @param {boolean} nextLevel - If true, only returns immediate children.
    * @returns {Array} List of {name, writable} objects.
    */
-  getParameterNames(parameterPath: string | null, nextLevel: boolean) {
-    const node = this.findNode(parameterPath);
-    if (!node) return [];
-
-    let results = [];
-    const prefix = parameterPath?.endsWith('.') || parameterPath === "" ? parameterPath : parameterPath + ".";
-
-    if (node._value !== undefined) {
-      // It's a leaf
-      return [{ name: parameterPath, writable: node._writable }];
-    }
-
-    for (const key in node) {
-      if (key.startsWith("_")) continue;
-      const childPath = prefix + key;
-      const child = node[key];
-
-      if (child._value !== undefined) {
-        results.push({ name: childPath, writable: child._writable });
-      } else {
-        if (nextLevel) {
-          results.push({ name: childPath + ".", writable: child._writable || false });
-        } else {
-          results = results.concat(this.getParameterNames(childPath, false));
-        }
-      }
-    }
-    return results;
+  getParameterNames(parameterPath: string | null, nextLevel: boolean): Array<{ name: string; writable: boolean }> {
+    return this._params.getParameterNames(parameterPath, nextLevel);
   }
 
   /**
@@ -405,47 +399,8 @@ export default class CWMPDevice {
    * @param {string} path - The object path (ending in dot).
    * @returns {Array} [Status, InstanceNumber]
    */
-  addObject(path: string | null) {
-    if (!path) return [9005, 0];
-    // Path should end with "."? TR-069 says AddObject(ObjectName) where ObjectName ends in .
-    if (path.endsWith(".")) path = path.slice(0, -1);
-
-    // Generic Fallback
-    const parentNode = this.findNode(path);
-    if (!parentNode) return [9005, 0];
-
-    // Calculate new instance ID
-    let maxInstance = 0;
-    for (const key in parentNode) {
-      if (key.startsWith("_")) continue;
-      if (!isNaN(parseInt(key))) {
-        const instance = parseInt(key);
-        if (instance > maxInstance) maxInstance = instance;
-      }
-    }
-
-    let newInstanceId = maxInstance + 1;
-    parentNode[newInstanceId] = { _writable: true };
-    if (typeof parentNode.funcObj == 'function') {
-      parentNode[newInstanceId] = parentNode.funcObj(this, { _writable: true }, newInstanceId, parentNode);
-    }
-
-    // Attempt Generic NumberOfEntries Update
-    const pathParts = path.split('.');
-    const collectionName = pathParts.pop();
-    const grandParentPath = pathParts.join('.');
-    if (grandParentPath) {
-      let numEntriesPath = `${grandParentPath}.${collectionName}NumberOfEntries`;
-      let node = this.findNode(numEntriesPath);
-      if (node) {
-        let currentVal = parseInt(node._value || '0');
-        node._value = String(currentVal + 1);
-        // this.set(numEntriesPath, String(currentVal + 1));
-        this.fireEvent('add', numEntriesPath, node._value);
-      }
-    }
-
-    return [0, newInstanceId];
+  addObject(path: string | null): [number, number] {
+    return this._params.addObject(path);
   }
 
   /**
@@ -454,47 +409,7 @@ export default class CWMPDevice {
    * @returns {number} Status code (0 for success).
    */
   deleteObject(path: string | null): number {
-    if (!path) return 1;
-    if (path.endsWith(".")) path = path.slice(0, -1);
-
-    const parts = path.split('.');
-    const instancePart = parts.pop();
-    const parentPath = parts.join('.');
-
-    const parentNode = this.findNode(parentPath);
-    if (!parentNode) return 1; // 9005
-
-    if (!parentNode[instancePart]) return 1; // 9005 Invalid
-
-    delete parentNode[instancePart];
-
-    // Attempt Generic NumberOfEntries Update (Decrement)
-    if (parentPath) {
-      let collectionName = parentPath.split('.').pop() || ""; // Might normally be derived differently, but check 'addObject' logic
-      // Actually 'parts' has parentPath. parentPath is "Device.X.PortMapping".
-      // collectionName is "PortMapping".
-      // grandParentPath would be "Device.X".
-      // But here 'parts' was split from "Device.X.PortMapping.1" -> parentPath="Device.X.PortMapping", instancePart="1".
-      // So parentPath is the collection path.
-
-      const pathParts = parentPath.split('.');
-      const collName = pathParts.pop();
-      const gpPath = pathParts.join('.');
-
-      if (gpPath) {
-        let numEntriesPath = `${gpPath}.${collName}NumberOfEntries`;
-        let node = this.findNode(numEntriesPath);
-        if (node) {
-          let currentVal = parseInt(node._value || '0');
-          if (currentVal > 0) {
-            node._value = String(currentVal - 1);
-            this.fireEvent('set', numEntriesPath, node._value);
-          }
-        }
-      }
-    }
-
-    return 0; // Success
+    return this._params.deleteObject(path);
   }
 
   /**
@@ -527,7 +442,7 @@ export default class CWMPDevice {
    */
   fireEvent(event: string, path: string, data: any) {
     if (this.listeners.has(path)) {
-      this.listeners.get(path).forEach(callback => callback(data));
+      this.listeners.get(path).forEach((callback) => callback(data));
     }
   }
 
@@ -537,49 +452,8 @@ export default class CWMPDevice {
    * @param {string} path - The root path to search.
    * @returns {Array} List of {name, value, type, writable} objects.
    */
-  getLeaves(path: string): Array<{ name: string, value: string, type: string, writable: boolean }> {
-    const node = this.findNode(path);
-    if (!node) return [];
-
-    let results = [];
-    // If path is root or ends in dot, prefix is path.
-    // If path is "Device", prefix is "Device."
-    // Actually findNode handles the traversal.
-    // If path is "Device.DeviceInfo", key is "Manufacturer". childPath should be "Device.DeviceInfo.Manufacturer".
-    const prefix = path.endsWith('.') || path === "" ? path : path + ".";
-
-    if (node._value !== undefined) {
-      // It's a leaf
-      return [{
-        name: path,
-        value: node._value,
-        type: node._type,
-        writable: node._writable
-      }];
-    }
-
-    for (const key in node) {
-      if (key.startsWith("_")) continue;
-      const childPath = prefix + key;
-      const child = node[key]; // This gets the object at that key
-
-      // We need to pass the full path to recursive call
-      // If we are at Device.DeviceInfo, keys are Manufacturer, etc.
-      // Recursive call with Device.DeviceInfo.Manufacturer
-
-      // Optimization: if child is leaf, push immediately
-      if (child && child._value !== undefined) {
-        results.push({
-          name: childPath,
-          value: child._value,
-          type: child._type,
-          writable: child._writable
-        });
-      } else {
-        results = results.concat(this.getLeaves(childPath));
-      }
-    }
-    return results;
+  getLeaves(path: string): Array<{ name: string; value: string; type: string; writable: boolean }> {
+    return this._params.getLeaves(path);
   }
 
   /**
@@ -588,7 +462,7 @@ export default class CWMPDevice {
    * @param {object} internalModel - The internal model structure.
    */
   setObjectModel(path: string, internalModel: object) {
-    this.objectModels.set(path, internalModel);
+    this._params.setObjectModel(path, internalModel);
   }
   /**
    * Generates the TR-098 InternetGatewayDevice structure.
@@ -596,48 +470,48 @@ export default class CWMPDevice {
    */
   defaultTR98(): object {
     const root = {
-      'InternetGatewayDevice': {
+      InternetGatewayDevice: {
         _writable: false,
-        'DeviceInfo': models.merge(models.commonDeviceInfoParams, {
-          'Manufacturer': { _value: this._manufacturer, _type: 'xsd:string', _writable: false },
-          'ManufacturerOUI': { _value: this._oui, _type: 'xsd:string', _writable: false },
-          'ProductClass': { _value: this._productClass, _type: 'xsd:string', _writable: false },
-          'SerialNumber': { _value: this._serialNumber, _type: 'xsd:string', _writable: false },
+        DeviceInfo: models.merge(models.commonDeviceInfoParams, {
+          Manufacturer: { _value: this._manufacturer, _type: "xsd:string", _writable: false },
+          ManufacturerOUI: { _value: this._oui, _type: "xsd:string", _writable: false },
+          ProductClass: { _value: this._productClass, _type: "xsd:string", _writable: false },
+          SerialNumber: { _value: this._serialNumber, _type: "xsd:string", _writable: false }
         }),
-        'ManagementServer': models.merge(models.commonManagementServerParams, {
+        ManagementServer: models.merge(models.commonManagementServerParams, {
           _writable: false,
-          'Username': { _value: "", _type: 'xsd:string', _writable: true },
-          'Password': { _value: "", _type: 'xsd:string', _writable: true },
-          'ConnectionRequestUsername': { _value: "", _type: 'xsd:string', _writable: true },
-          'ConnectionRequestPassword': { _value: "", _type: 'xsd:string', _writable: true },
-          'ConnectionRequestURL': { _value: "", _type: 'xsd:string', _writable: false },
+          Username: { _value: "", _type: "xsd:string", _writable: true },
+          Password: { _value: "", _type: "xsd:string", _writable: true },
+          ConnectionRequestUsername: { _value: "", _type: "xsd:string", _writable: true },
+          ConnectionRequestPassword: { _value: "", _type: "xsd:string", _writable: true },
+          ConnectionRequestURL: { _value: "", _type: "xsd:string", _writable: false }
         }),
-        'IPPingDiagnostics': models.merge(models.ipPingDiagnosticsParams, {}),
-        'TraceRouteDiagnostics': models.merge(models.traceRouteDiagnosticsParams, {}),
-        'DownloadDiagnostics': models.merge(models.downloadDiagnosticsParams, {}),
-        'UploadDiagnostics': models.merge(models.uploadDiagnosticsParams, {}),
-        'WANDevice': {
+        IPPingDiagnostics: models.merge(models.ipPingDiagnosticsParams, {}),
+        TraceRouteDiagnostics: models.merge(models.traceRouteDiagnosticsParams, {}),
+        DownloadDiagnostics: models.merge(models.downloadDiagnosticsParams, {}),
+        UploadDiagnostics: models.merge(models.uploadDiagnosticsParams, {}),
+        WANDevice: {
           _writable: false,
-          '1': {
+          "1": {
             _writable: false,
-            'WANConnectionDevice': {
+            WANConnectionDevice: {
               _writable: false,
-              '1': {
+              "1": {
                 _writable: false,
-                'WANIPConnection': {
+                WANIPConnection: {
                   _writable: false,
-                  '1': models.merge(models.wanIPConnectionDeviceParams, {})
+                  "1": models.merge(models.wanIPConnectionDeviceParams, {})
                 }
               }
             }
           }
         },
-        'LANDevice': {
+        LANDevice: {
           _writable: false,
-          '1': {
+          "1": {
             _writable: false,
-            'WLANConfiguration': {
-              '1': models.merge(models.wlanConfigurationParams, { _writable: false })
+            WLANConfiguration: {
+              "1": models.merge(models.wlanConfigurationParams, { _writable: false })
             }
           }
         }
@@ -653,22 +527,22 @@ export default class CWMPDevice {
    */
   defaultTR181(): object {
     const root = {
-      "Device": {
+      Device: {
         _writable: false,
         DeviceInfo: models.merge(models.commonDeviceInfoParams, {
           _writable: false,
-          'Manufacturer': { _value: this._manufacturer, _type: 'xsd:string', _writable: false },
-          'ManufacturerOUI': { _value: this._oui, _type: 'xsd:string', _writable: false },
-          'ProductClass': { _value: this._productClass, _type: 'xsd:string', _writable: false },
-          'SerialNumber': { _value: this._serialNumber, _type: 'xsd:string', _writable: false },
+          Manufacturer: { _value: this._manufacturer, _type: "xsd:string", _writable: false },
+          ManufacturerOUI: { _value: this._oui, _type: "xsd:string", _writable: false },
+          ProductClass: { _value: this._productClass, _type: "xsd:string", _writable: false },
+          SerialNumber: { _value: this._serialNumber, _type: "xsd:string", _writable: false }
         }),
         ManagementServer: models.merge(models.commonManagementServerParams, {
           _writable: false,
-          'Username': { _value: "", _type: 'xsd:string', _writable: true },
-          'Password': { _value: "", _type: 'xsd:string', _writable: true },
-          'ConnectionRequestUsername': { _value: "", _type: 'xsd:string', _writable: true },
-          'ConnectionRequestPassword': { _value: "", _type: 'xsd:string', _writable: true },
-          'ConnectionRequestURL': { _value: "", _type: 'xsd:string', _writable: false },
+          Username: { _value: "", _type: "xsd:string", _writable: true },
+          Password: { _value: "", _type: "xsd:string", _writable: true },
+          ConnectionRequestUsername: { _value: "", _type: "xsd:string", _writable: true },
+          ConnectionRequestPassword: { _value: "", _type: "xsd:string", _writable: true },
+          ConnectionRequestURL: { _value: "", _type: "xsd:string", _writable: false }
         }),
         IP: {
           _writable: false,
@@ -677,7 +551,7 @@ export default class CWMPDevice {
             IPPing: models.merge(models.ipPingDiagnosticsParams, {}),
             TraceRoute: models.merge(models.traceRouteDiagnosticsParams, {}),
             DownloadDiagnostics: models.merge(models.downloadDiagnosticsParams, {}),
-            UploadDiagnostics: models.merge(models.uploadDiagnosticsParams, {}),
+            UploadDiagnostics: models.merge(models.uploadDiagnosticsParams, {})
           }
         },
         LANDevice: {
@@ -685,7 +559,7 @@ export default class CWMPDevice {
           1: {
             _writable: false,
             WLANConfiguration: {
-              '1': models.merge(models.wlanConfigurationParams, { _writable: false })
+              "1": models.merge(models.wlanConfigurationParams, { _writable: false })
             }
           }
         }

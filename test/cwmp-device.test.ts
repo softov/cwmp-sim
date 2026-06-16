@@ -116,3 +116,28 @@ test("set fires a change listener with the new value", () => {
   d.set(PROVCODE, "NOTIFY");
   assert.equal(received, "NOTIFY");
 });
+
+const MS = "InternetGatewayDevice.ManagementServer";
+
+test("configureManagementServer writes ACS + CR config into the model", () => {
+  const d = makeDevice();
+  d.configureManagementServer({ acsUrl: "http://acs/x", acsUser: "u", acsPass: "p", crUser: "cru", crPass: "crp" });
+  assert.equal(d.getValue(`${MS}.URL`), "http://acs/x");
+  assert.equal(d.getValue(`${MS}.Username`), "u");
+  assert.equal(d.getValue(`${MS}.Password`), "p");
+  assert.deepEqual(d.getCrCredentials(), { user: "cru", pass: "crp" });
+});
+
+test("configureManagementServer leaves omitted fields untouched", () => {
+  const d = makeDevice();
+  d.configureManagementServer({ acsUrl: "http://acs/x" });
+  assert.equal(d.getValue(`${MS}.URL`), "http://acs/x");
+  // ConnectionRequestUsername not provided → stays at its default (empty).
+  assert.equal(d.getCrCredentials().user, "");
+});
+
+test("setConnectionRequestURL updates the CR URL leaf", () => {
+  const d = makeDevice();
+  d.setConnectionRequestURL("http://host:7547/abc123");
+  assert.equal(d.getValue(`${MS}.ConnectionRequestURL`), "http://host:7547/abc123");
+});
