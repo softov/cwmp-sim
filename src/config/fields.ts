@@ -175,7 +175,7 @@ export const configFields: ConfigField<unknown>[] = [
     env: "CONN_PORT",
     flag: "--port",
     label: "Connection request bind port",
-    default: 7547,
+    default: 7557,
     parse: asInt
   },
   {
@@ -226,7 +226,7 @@ export const configFields: ConfigField<unknown>[] = [
     env: "FLEET_BOOT_DELAY",
     flag: "--boot-delay",
     label: "Delay (ms) between device boots",
-    default: 1000,
+    default: 500,
     parse: asInt
   },
   {
@@ -250,7 +250,7 @@ export const configFields: ConfigField<unknown>[] = [
     env: "DASHBOARD_PORT",
     flag: "--dashboard-port",
     label: "Dashboard port",
-    default: 8080,
+    default: 3000,
     parse: asInt
   },
   {
