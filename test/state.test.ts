@@ -98,7 +98,7 @@ test("importState recreates an AddObject'd instance with funcObj defaults + Numb
   // Source: the ACS adds an instance and sets a value, then we snapshot.
   const src = makeDevice();
   src.addObject(PM + ".");
-  src.set(`${PM}.1.ExternalPort`, "8080");
+  src.set(`${PM}.1.ExternalPort`, "3000");
   const snapshot = src.exportState();
 
   // Destination: a fresh device with no instance yet.
@@ -109,7 +109,7 @@ test("importState recreates an AddObject'd instance with funcObj defaults + Numb
   dst.importState(snapshot);
 
   // The instance is recreated: saved override + funcObj defaults + counter.
-  assert.equal(dst.getValue(`${PM}.1.ExternalPort`), "8080");
+  assert.equal(dst.getValue(`${PM}.1.ExternalPort`), "3000");
   assert.equal(dst.getValue(`${PM}.1.InternalPort`), "0"); // funcObj default
   assert.equal(dst.getValue(PM_COUNT), "1"); // NumberOfEntries rebuilt (was the gap)
 });
